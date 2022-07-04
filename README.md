@@ -15,8 +15,8 @@ Server side:
 
 **3. How to use**
 
-- Build an object detector for the object which requires to estimate the size.
-- As the current moment, it also needs a dummy classifier (because it extended the TwoStageOWF). This will be removed next version of server.py after this measurement is added to the OpenWorkFlow.
+- Build an object detector for the object.
+- As the current moment, it also needs a dummy classifier (because it extended the TwoStageOWF). This will be removed next version of server.py after this measurement processor is added to the OpenWorkFlow.
 - Access the OWF service at https://cmusatyalab.github.io/OpenWorkflow/ to build a workflow, as the example attached (i.e., app.pbfsm). 
 - Upload all to a server running Tensorflow API:
 - The file is ordered in the server as:
@@ -38,5 +38,5 @@ Server side:
 ------------dummy_classifier
 
 - Run the server as: python server.py ../../app.pbfsm
-- Connect the client to server to go through the predefined workflow.
+- Connect the client to the server to go through the predefined workflow.
 
