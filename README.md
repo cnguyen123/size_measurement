@@ -38,5 +38,5 @@ Server side:
 ------------dummy_classifier
 
 - Run the server as: python server.py ../../app.pbfsm
-- Connect the client to the server to go through the predefined workflow.
+- Connect the client (build and run the android-client app) to the server to go through the predefined workflow.
 
