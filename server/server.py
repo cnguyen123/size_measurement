@@ -399,7 +399,7 @@ class InferenceEngine(cognitive_engine.Engine):
 
            
             #size measurement
-            if detector_class_name == "default":
+            if detector_class_name == "bolt":
                 #print("Start to estimate size of the object...")
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
                                           xmax * im_width, ymax * im_height)
