@@ -16,7 +16,6 @@ from object_detection.utils import label_map_util
 
 from torchvision import transforms
 import torch
-import torch.nn.functional as nnf
 from gabriel_server import cognitive_engine
 from gabriel_server import local_engine
 from gabriel_protocol import gabriel_pb2
@@ -27,20 +26,17 @@ import mpncov
 import owf_pb2
 import wca_state_machine_pb2
 
-
 SOURCE = 'owf_client'
 INPUT_QUEUE_MAXSIZE = 60
 PORT = 9099
 NUM_TOKENS = 1
-
 DETECTOR_ONES_SIZE = (1, 480, 640, 3)
-
 
 ALWAYS = 'Always'
 HAS_OBJECT_CLASS = 'HasObjectClass'
 CLASS_NAME = 'class_name'
 TWO_STAGE_PROCESSOR = 'TwoStageProcessor'
-DUMMY_PROCESSOR ='DummyProcessor'
+DUMMY_PROCESSOR = 'DummyProcessor'
 CLASSIFIER_PATH = 'classifier_path'
 DETECTOR_PATH = 'detector_path'
 DETECTOR_CLASS_NAME = 'detector_class_name'
@@ -50,11 +46,8 @@ LABELS_FILENAME = 'classes.txt'
 CLASSIFIER_FILENAME = 'model_best.pth.tar'
 LABEL_MAP_FILENAME = 'label_map.pbtxt'
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-OUTPUT_DIR='../../classifier/data/carbody_chassis/faultNegativeResult'
 
 _State = namedtuple('_State', ['always_transition', 'has_class_transitions', 'processors'])
 _Classifier = namedtuple('_Classifier', ['model', 'labels'])
@@ -171,28 +164,24 @@ class _StatesModels:
         self._start_state = self._states[pb_fsm.start_state]
 
     def _load_models(self, processor):
-        assert processor.callable_name == TWO_STAGE_PROCESSOR or processor.callable_name == DUMMY_PROCESSOR, 'bad processor'
-
+        assert processor.callable_name == TWO_STAGE_PROCESSOR or processor.callable_name == DUMMY_PROCESSOR,\
+            'bad processor'
         callable_args = json.loads(processor.callable_args)
-    
+
         if processor.callable_name == TWO_STAGE_PROCESSOR:
-
             classifier_dir = callable_args[CLASSIFIER_PATH]
-
             if classifier_dir not in self._classifiers:
-        
-                #print(os.listdir(classifier_dir))
                 print(classifier_dir)
                 labels_file = open(os.path.join(classifier_dir, LABELS_FILENAME))
                 labels = ast.literal_eval(labels_file.read())
 
                 freezed_layer = 0
                 model = mpncov.Newmodel(self._classifier_representation,
-                                    len(labels), freezed_layer)
+                                        len(labels), freezed_layer)
                 model.features = torch.nn.DataParallel(model.features)
                 model.cuda()
                 trained_model = torch.load(os.path.join(classifier_dir,
-                                                    CLASSIFIER_FILENAME))
+                                                        CLASSIFIER_FILENAME))
                 model.load_state_dict(trained_model['state_dict'])
                 model.eval()
 
@@ -273,10 +262,8 @@ class _StatesForExpertCall:
 
 
 class InferenceEngine(cognitive_engine.Engine):
-   #image_count = 0
-  
+
     def __init__(self, fsm_file_path):
-        #print("In INIT INFERENCE ENGINE")
         self.image_count = 0
         self.count_ = 0
         self.error_count = 0
@@ -307,8 +294,13 @@ class InferenceEngine(cognitive_engine.Engine):
 
         self._on_zoom_call = False
 
+        # ################### Temporary fix
+        self._last_label = None
+        self._last_count = 0
+        # ################### TODO: Make the server stateless
+
     def handle(self, input_frame):
-    
+
         to_server_extras = cognitive_engine.unpack_extras(
             owf_pb2.ToServerExtras, input_frame)
 
@@ -358,8 +350,8 @@ class InferenceEngine(cognitive_engine.Engine):
 
         np_data = np.frombuffer(input_frame.payloads[0], dtype=np.uint8)
         img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        #07/02/2022
-        #img_size_measure = img.copy()
+        # 07/02/2022
+        # img_size_measure = img.copy()
         #
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         detections = detector.detector(np.expand_dims(img, 0))
@@ -377,103 +369,109 @@ class InferenceEngine(cognitive_engine.Engine):
 
         conf_threshold = float(callable_args[CONF_THRESHOLD])
         detector_class_name = callable_args[DETECTOR_CLASS_NAME]
+
+        best_score = 0.4  # Lowest confidence threshold
+        best_box = None
+        num_boxes = 0
         for score, box, class_id in zip(scores, boxes, classes):
             class_name = detector.category_index[class_id]['name']
-            if (score < conf_threshold) or (class_name != detector_class_name):
-               continue
+            if score > best_score and class_name == detector_class_name:
+                best_score = score
+                best_box = box
+                num_boxes += 1
+        # Be conservative, only check the current step if there is only one object detected
+        if num_boxes == 1 and best_score > conf_threshold:
             logger.debug('found object')
-            #print('score is ', score, 'but threshold is ', conf_threshold)
-            #print('class_name is ', class_name)
-            #print('detector_class_name is ', detector_class_name)
-
-
-
+            print('score:', best_score)
+            print('detector_class_name:', detector_class_name)
 
             # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/research/object_detection/utils/visualization_utils.py#L1232
-            ymin, xmin, ymax, xmax = box
+            ymin, xmin, ymax, xmax = best_box
 
             # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/official/vision/detection/utils/object_detection/visualization_utils.py#L192
             (left, right, top, bottom) = (
                 xmin * im_width, xmax * im_width,
                 ymin * im_height, ymax * im_height)
 
-           
-            #size measurement
+            # size measurement
             if detector_class_name == "bolt":
-                #print("Start to estimate size of the object...")
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
-                                          xmax * im_width, ymax * im_height)
-                img, re1, size_ob = ms.size_measuring2(xmin, ymin, xmax, ymax, img)
-                cv2.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
-                img_to_send = img
-                img_to_send = cv2.cvtColor(img_to_send, cv2.COLOR_BGR2RGB)
-                _, jpeg_img = cv2.imencode('.jpg', img_to_send)
-                img_data = jpeg_img.tobytes()   
-                result = gabriel_pb2.ResultWrapper.Result()
-                result.payload_type = gabriel_pb2.PayloadType.IMAGE
-                result.payload = img_data
-                
-                label_name = ""
+                                            xmax * im_width, ymax * im_height)
+                img, re1, size_ob = ms.size_measuring(xmin, ymin, xmax, ymax, img)
+                # cv2.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
+                # img_to_send = img
+                # img_to_send = cv2.cvtColor(img_to_send, cv2.COLOR_BGR2RGB)
+                # _, jpeg_img = cv2.imencode('.jpg', img_to_send)
+                # img_data = jpeg_img.tobytes()
+                # result = gabriel_pb2.ResultWrapper.Result()
+                # result.payload_type = gabriel_pb2.PayloadType.IMAGE
+                # result.payload = img_data
+
                 if re1 == -2:
-                    continue # Do not care this error, since it is a fault positive result
+                    # Possibly a false positive detection - detecting the aruco marker as the bolt
+                    label_name = None
+                    self.count_ = 0
+                    self.error_count = 0
                 elif re1 == -1:
-                    #print("Something wrong!the marker is not fullly showed...")
-                    label_name = "aruco_error"
+                    print("The marker is not fully shown...")
+                    label_name = None
+                    self.error_count = 0
                     self.count_ += 1
-                    #print("Self.count ", self.count_)
-                    if self.count_ == 3:
+                    # Wait for 7 consecutive aruco_error before reporting
+                    if self.count_ >= 6:
+                        label_name = "aruco_error"
+                    if self.count_ >= 7:
                         self.count_ = 0
-                        print("label is", label_name)
-                        #transition = state.has_class_transitions.get(label_name)
-                    elif self.count_ < 3:
-                        continue
-
                 else:
+                    # from cm to mm
+                    size_ob = round(size_ob * 10, 0)
+                    print("Object length: ", size_ob, "mm")
 
-                    size_ob = round(size_ob * 10, 0) #from cm to mm
-                    print("Object size is ", size_ob)
+                    self.count_ = 0
                     if size_ob in range(12 - 2, 12 + 7):
                         label_name = "bolt12"
-                        self.count_ += 1
-                        print("Self.count ", self.count_)
-                        
-                    else: #different bolt size
-                        label_name = "error"
+                        self.error_count = 0
+
+                    else:
+                        # wrong bolt length
+                        label_name = None
                         self.error_count += 1
-                        if self.error_count == 7:
+                        # Wait for 7 consecutive wrong-bolt error before reporting
+                        if self.error_count >= 6:
+                            label_name = "error"
+                        if self.error_count >= 7:
                             self.error_count = 0
-                        elif self.error_count < 7:
-                            continue
-                transition = state.has_class_transitions.get(label_name)
-                if transition is None:
-                    continue
-
-                return _result_wrapper_for_transition(transition)
-
             # end size measurement
 
-            cropped_pil = pil_img.crop((left, top, right, bottom))
+            else:
+                cropped_pil = pil_img.crop((left, top, right, bottom))
+                transformed = self._transform(cropped_pil).cuda()
+                output = classifier.model(transformed[None, ...])
+                _, pred = output.topk(1, 1, True, True)
+                classId = pred.t()
+                label_name = classifier.labels[classId]
 
-            transformed = self._transform(cropped_pil).cuda()
-
-            output = classifier.model(transformed[None, ...])
-            
-            _, pred = output.topk(1, 1, True, True)
-            classId = pred.t()
-        
-            label_name = classifier.labels[classId]
             logger.info('Found label: %s', label_name)
-  
-            transition = state.has_class_transitions.get(label_name)
-           
-            if transition is None:
-                continue
-            
-            return _result_wrapper_for_transition(transition)
+            # logger.info('return transition: %s', str(state.has_class_transitions.keys()))
+            # logger.info('current state name on server is: %s', step)
 
-
-        return _result_wrapper_for(
-            step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+            # Confirm results in two consecutive images
+            if label_name is not None and self._last_label == label_name:
+                if self._last_count == 1:
+                    # Note that a state will never transition to itself again in OWF
+                    transition = state.has_class_transitions.get(label_name)
+                    if transition is not None:
+                        self._last_label = label_name
+                        self._last_count = 0
+                        return _result_wrapper_for_transition(transition)
+                self._last_count += 1
+            else:
+                self._last_label = label_name
+                self._last_count = 1
+        else:
+            self._last_label = None
+            self._last_count = 1
+        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
 
 def main():
