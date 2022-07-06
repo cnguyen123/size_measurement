@@ -369,18 +369,26 @@ class InferenceEngine(cognitive_engine.Engine):
         conf_threshold = float(callable_args[CONF_THRESHOLD])
         detector_class_name = callable_args[DETECTOR_CLASS_NAME]
 
-        best_score = 0.4  # Lowest confidence threshold
-        best_box = None
-        num_boxes = 0
+        good_boxes = []
+        box_scores = []
         for score, box, class_id in zip(scores, boxes, classes):
             class_name = detector.category_index[class_id]['name']
-            if score > best_score:  # and class_name == detector_class_name:
-                best_score = score
-                best_box = box
-                num_boxes += 1
-        # Be conservative, only check the current step if there is only one object detected
-        if num_boxes == 1 and best_score > conf_threshold:
-            logger.debug('found object')
+            if score > conf_threshold:  # and class_name == detector_class_name:
+                bi = 0
+                while bi < len(box_scores):
+                    if score > box_scores[bi]:
+                        break
+                    bi += 1
+                good_boxes.insert(bi, box)
+                box_scores.insert(bi, score)
+
+        if not good_boxes:
+            self._last_label = None
+            self._last_count = 1
+            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+
+        print("boxes:", box_scores)
+        for best_box in good_boxes:
             # print('score:', best_score)
             # print('detector_class_name:', detector_class_name)
 
@@ -397,29 +405,22 @@ class InferenceEngine(cognitive_engine.Engine):
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
                                             xmax * im_width, ymax * im_height)
                 img, re1, size_ob = ms.size_measuring(xmin, ymin, xmax, ymax, img)
-                # cv2.rectangle(img, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
-                # img_to_send = img
-                # img_to_send = cv2.cvtColor(img_to_send, cv2.COLOR_BGR2RGB)
-                # _, jpeg_img = cv2.imencode('.jpg', img_to_send)
-                # img_data = jpeg_img.tobytes()
-                # result = gabriel_pb2.ResultWrapper.Result()
-                # result.payload_type = gabriel_pb2.PayloadType.IMAGE
-                # result.payload = img_data
 
                 if re1 == -2:
                     # Possibly a false positive detection - detecting the aruco marker as the bolt
                     label_name = None
                     self.count_ = 0
                     self.error_count = 0
+                    continue
                 elif re1 == -1:
                     print("The marker is not fully shown...")
                     label_name = None
                     self.error_count = 0
                     self.count_ += 1
-                    # Wait for 6 consecutive aruco_error before reporting
-                    if self.count_ >= 5:
+                    # Wait for 5 consecutive aruco_error before reporting
+                    if self.count_ >= 4:
                         label_name = "aruco_error"
-                    if self.count_ >= 6:
+                    if self.count_ >= 5:
                         self.count_ = 0
                 else:
                     # from cm to mm
@@ -435,10 +436,10 @@ class InferenceEngine(cognitive_engine.Engine):
                         # wrong bolt length
                         label_name = None
                         self.error_count += 1
-                        # Wait for 6 consecutive wrong-bolt error before reporting
-                        if self.error_count >= 5:
+                        # Wait for 5 consecutive wrong-bolt error before reporting
+                        if self.error_count >= 4:
                             label_name = "error"
-                        if self.error_count >= 6:
+                        if self.error_count >= 5:
                             self.error_count = 0
             # end size measurement
 
@@ -467,9 +468,7 @@ class InferenceEngine(cognitive_engine.Engine):
             else:
                 self._last_label = label_name
                 self._last_count = 1
-        else:
-            self._last_label = None
-            self._last_count = 1
+            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
         return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
 
