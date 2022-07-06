@@ -52,7 +52,7 @@ def size_measuring(xmi_, ymi_, xma_, yma_, frame):
         return img, -1, -100
     
     
-    int_corners = np.int0(corners)
+    int_corners = np.int0(corners[0])
     #reshape the bounding of aruco marker
     four_corners = int_corners.reshape((4, 2))
     
