@@ -46,7 +46,7 @@ def size_measuring(xmi_, ymi_, xma_, yma_, frame):
         print("WARNING: Show full aruco marker please!!!!!!!!")
         return img, -1, -100
 
-    int_corners = np.int0(corners)
+    int_corners = np.int0(corners[0])
     # reshape the bounding of aruco marker
     four_corners = int_corners.reshape((4, 2))
 
@@ -58,24 +58,8 @@ def size_measuring(xmi_, ymi_, xma_, yma_, frame):
     x_overlap = (minx >= xmi and minx <= xma) or (maxx >= xmi and maxx <= xma)
     y_overlap = (miny >= ymi and miny <= yma) or (maxy >= ymi and maxy <= yma)
     if x_overlap and y_overlap:
-        if xmi <= minx and xma >= maxx and ymi <= miny and yma >= maxy:
-            # If inclusive, choose the maximum non-overlapping region
-            max_area_ind = np.argmax(np.asarray([(minx - xmi) * (yma - ymi),
-                                                 (xma - maxx) * (yma - ymi),
-                                                 (miny - ymi) * (xma - xmi),
-                                                 (yma - maxy) * (xma - xmi)]))
-            if max_area_ind == 0:
-                xma = minx
-            elif max_area_ind == 1:
-                xmi = maxx
-            elif max_area_ind == 2:
-                yma = miny
-            elif max_area_ind == 3:
-                ymi = maxy
-
-        else:
-            print("WARNING: False positive!!!")
-            return img, -2, -100
+        print("WARNING: False positive!!!")
+        return img, -2, -100
 
     # Aruco Perimeter
     aruco_perimeter = cv2.arcLength(corners[0], True)

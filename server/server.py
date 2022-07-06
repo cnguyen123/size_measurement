@@ -416,10 +416,10 @@ class InferenceEngine(cognitive_engine.Engine):
                     label_name = None
                     self.error_count = 0
                     self.count_ += 1
-                    # Wait for 7 consecutive aruco_error before reporting
-                    if self.count_ >= 6:
+                    # Wait for 6 consecutive aruco_error before reporting
+                    if self.count_ >= 5:
                         label_name = "aruco_error"
-                    if self.count_ >= 7:
+                    if self.count_ >= 6:
                         self.count_ = 0
                 else:
                     # from cm to mm
@@ -427,7 +427,7 @@ class InferenceEngine(cognitive_engine.Engine):
                     print("Object length: ", size_ob, "mm")
 
                     self.count_ = 0
-                    if size_ob in range(12 - 2, 12 + 7):
+                    if size_ob in range(12 - 2, 12 + 12):
                         label_name = "bolt12"
                         self.error_count = 0
 
@@ -435,10 +435,10 @@ class InferenceEngine(cognitive_engine.Engine):
                         # wrong bolt length
                         label_name = None
                         self.error_count += 1
-                        # Wait for 7 consecutive wrong-bolt error before reporting
-                        if self.error_count >= 6:
+                        # Wait for 6 consecutive wrong-bolt error before reporting
+                        if self.error_count >= 5:
                             label_name = "error"
-                        if self.error_count >= 7:
+                        if self.error_count >= 6:
                             self.error_count = 0
             # end size measurement
 
