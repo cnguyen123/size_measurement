@@ -44,8 +44,6 @@ class Basemodel(nn.Module):
 class Newmodel(Basemodel):
     def __init__(self, representation, num_classes, freezed_layer):
         super(Newmodel, self).__init__()
-        print('IN MODEL aa') 
-        print(representation['function'])
         representation_method = representation['function']
         representation.pop('function')
         representation_args = representation

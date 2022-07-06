@@ -171,12 +171,11 @@ class _StatesModels:
         if processor.callable_name == TWO_STAGE_PROCESSOR:
             classifier_dir = callable_args[CLASSIFIER_PATH]
             if classifier_dir not in self._classifiers:
-                print(classifier_dir)
                 labels_file = open(os.path.join(classifier_dir, LABELS_FILENAME))
                 labels = ast.literal_eval(labels_file.read())
 
                 freezed_layer = 0
-                model = mpncov.Newmodel(self._classifier_representation,
+                model = mpncov.Newmodel(self._classifier_representation.copy(),
                                         len(labels), freezed_layer)
                 model.features = torch.nn.DataParallel(model.features)
                 model.cuda()
@@ -375,15 +374,15 @@ class InferenceEngine(cognitive_engine.Engine):
         num_boxes = 0
         for score, box, class_id in zip(scores, boxes, classes):
             class_name = detector.category_index[class_id]['name']
-            if score > best_score and class_name == detector_class_name:
+            if score > best_score:  # and class_name == detector_class_name:
                 best_score = score
                 best_box = box
                 num_boxes += 1
         # Be conservative, only check the current step if there is only one object detected
         if num_boxes == 1 and best_score > conf_threshold:
             logger.debug('found object')
-            print('score:', best_score)
-            print('detector_class_name:', detector_class_name)
+            # print('score:', best_score)
+            # print('detector_class_name:', detector_class_name)
 
             # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/research/object_detection/utils/visualization_utils.py#L1232
             ymin, xmin, ymax, xmax = best_box

@@ -1,23 +1,0 @@
-Å
-Startx
-put_bolt_table
-bolt12Always"{}HFPlease place a bolt with size 12 mm on the table, close to the marker."Bolt12¬
-Bolt12≈
-boltTwoStageProcessor"©{"classifier_path":"../../Dummy_classifier/","detector_path":"../../exported_models/short_screw/v1/saved_model/","detector_class_name":"default","conf_threshold":"0.99"}Ä
-complete3
-completeHasObjectClass"{"class_name":"bolt12"}:8Perfect. This is the correct 12 mm bolt. Congratulation."EndV
-error/
-errorHasObjectClass"{"class_name":"error"}Not this bolt"Error_stateî
-aruco_error:
-
-aruco_codeHasObjectClass"{"class_name":"aruco_error"}<:Some thing is wrong. The aruco marker is not fully showed."Aruco_error
-Endä
-Error_state2
-error_stateDummyProcessor"{"dummy_input":"a"}G
-find_bold_again
-aAlways"{}Please find a 12 mm bolt."Bolt12ﬁ
-Aruco_error2
-aruco_errorDummyProcessor"{"dummy_input":"a"}ö
-place_clear_aruco
-
-aruco_showAlways"{}caPlease place the bolt separately with the aruco marker, and make sure the marker is fully showed."Bolt12"Start
