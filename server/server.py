@@ -267,8 +267,8 @@ class InferenceEngine(cognitive_engine.Engine):
         self.image_count = 0
         self.count_ = 0
         self.error_count = 0
-        self.aruco_patience = 5
-        self.error_patience = 4
+        self.aruco_patience = 4
+        self.error_patience = 2
         #############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -377,7 +377,7 @@ class InferenceEngine(cognitive_engine.Engine):
         box_scores = []
         for score, box, class_id in zip(scores, boxes, classes):
             class_name = detector.category_index[class_id]['name']
-            if score > conf_threshold:  # and class_name == detector_class_name:
+            if score > conf_threshold and class_name == detector_class_name:
                 bi = 0
                 while bi < len(box_scores):
                     if score > box_scores[bi]:
@@ -433,9 +433,16 @@ class InferenceEngine(cognitive_engine.Engine):
                     print("Object length: ", size_ob, "mm")
 
                     self.count_ = 0
-                    if size_ob in range(12 - 2, 12 + 12):
+                    if size_ob in range(12 - 2, 12 + 14):
                         label_name = "bolt12"
                         self.error_count = 0
+                        # ############################### Temp fix
+                        transition = state.has_class_transitions.get(label_name)
+                        if transition is not None:
+                            self._last_label = label_name
+                            self._last_count = 0
+                            return _result_wrapper_for_transition(transition)
+                        # ###############################
 
                     else:
                         label_name = None
@@ -445,8 +452,15 @@ class InferenceEngine(cognitive_engine.Engine):
                             label_name = "error"
                         if self.error_count >= self.error_patience + 1:
                             self.error_count = 0
-                            self.error_patience += 3
-                            # end size measurement
+                            # ############################### Temp fix
+                            transition = state.has_class_transitions.get(label_name)
+                            if transition is not None:
+                                self._last_label = label_name
+                                self._last_count = 0
+                                return _result_wrapper_for_transition(transition)
+                            # ###############################
+                            self.error_patience += 1
+            # end size measurement
 
             else:
                 cropped_pil = pil_img.crop((left, top, right, bottom))
@@ -482,6 +496,8 @@ class InferenceEngine(cognitive_engine.Engine):
         # Good boxes do not contain any valid steps
         self._last_label = None
         self._last_count = 0
+        self.count_ = 0
+        self.error_count = 0
         return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
 
