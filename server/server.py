@@ -263,9 +263,13 @@ class _StatesForExpertCall:
 class InferenceEngine(cognitive_engine.Engine):
 
     def __init__(self, fsm_file_path):
+        #############################################
         self.image_count = 0
         self.count_ = 0
         self.error_count = 0
+        self.aruco_patience = 5
+        self.error_patience = 4
+        #############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -417,11 +421,12 @@ class InferenceEngine(cognitive_engine.Engine):
                     label_name = None
                     self.error_count = 0
                     self.count_ += 1
-                    # Wait for 5 consecutive aruco_error before reporting
-                    if self.count_ >= 4:
+                    # Increasing patience for reporting aruco error
+                    if self.count_ >= self.aruco_patience:
                         label_name = "aruco_error"
-                    if self.count_ >= 5:
+                    if self.count_ >= self.aruco_patience + 1:
                         self.count_ = 0
+                        self.aruco_patience += 5
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
@@ -433,15 +438,15 @@ class InferenceEngine(cognitive_engine.Engine):
                         self.error_count = 0
 
                     else:
-                        # wrong bolt length
                         label_name = None
                         self.error_count += 1
-                        # Wait for 5 consecutive wrong-bolt error before reporting
-                        if self.error_count >= 4:
+                        # Increasing patience for reporting wrong length error
+                        if self.error_count >= self.error_patience:
                             label_name = "error"
-                        if self.error_count >= 5:
+                        if self.error_count >= self.error_patience + 1:
                             self.error_count = 0
-            # end size measurement
+                            self.error_patience += 3
+                            # end size measurement
 
             else:
                 cropped_pil = pil_img.crop((left, top, right, bottom))
@@ -455,20 +460,28 @@ class InferenceEngine(cognitive_engine.Engine):
             # logger.info('return transition: %s', str(state.has_class_transitions.keys()))
             # logger.info('current state name on server is: %s', step)
 
-            # Confirm results in two consecutive images
-            if label_name is not None and self._last_label == label_name:
-                if self._last_count == 1:
-                    # Note that a state will never transition to itself again in OWF
-                    transition = state.has_class_transitions.get(label_name)
-                    if transition is not None:
-                        self._last_label = label_name
-                        self._last_count = 0
-                        return _result_wrapper_for_transition(transition)
-                self._last_count += 1
+            if label_name is not None:
+                if self._last_label == label_name:
+                    self._last_count += 1
+                else:
+                    self._last_label = label_name
+                    self._last_count = 0
             else:
-                self._last_label = label_name
-                self._last_count = 1
+                self._last_label = None
+                self._last_count = 0
+            # Confirm results in two consecutive images
+            if self._last_count == 1:
+                # Note that a state will never transition to itself again in OWF
+                transition = state.has_class_transitions.get(label_name)
+                if transition is not None:
+                    self._last_label = label_name
+                    self._last_count = 0
+                    return _result_wrapper_for_transition(transition)
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+
+        # Good boxes do not contain any valid steps
+        self._last_label = None
+        self._last_count = 0
         return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
 
