@@ -31,6 +31,7 @@ INPUT_QUEUE_MAXSIZE = 60
 PORT = 9099
 NUM_TOKENS = 1
 DETECTOR_ONES_SIZE = (1, 480, 640, 3)
+CLASSIFIER_THRESHOLD = 0.9
 
 ALWAYS = 'Always'
 HAS_OBJECT_CLASS = 'HasObjectClass'
@@ -307,6 +308,8 @@ class InferenceEngine(cognitive_engine.Engine):
         to_server_extras = cognitive_engine.unpack_extras(
             owf_pb2.ToServerExtras, input_frame)
 
+        print('.', end='')
+
         if (to_server_extras.zoom_status ==
                 owf_pb2.ToServerExtras.ZoomStatus.STOP):
             msg = {
@@ -391,11 +394,9 @@ class InferenceEngine(cognitive_engine.Engine):
             self._last_count = 1
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
-        print("boxes:", box_scores)
+        print()
+        print("Detector boxes:", box_scores)
         for best_box in good_boxes:
-            # print('score:', best_score)
-            # print('detector_class_name:', detector_class_name)
-
             # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/research/object_detection/utils/visualization_utils.py#L1232
             ymin, xmin, ymax, xmax = best_box
 
@@ -466,9 +467,14 @@ class InferenceEngine(cognitive_engine.Engine):
                 cropped_pil = pil_img.crop((left, top, right, bottom))
                 transformed = self._transform(cropped_pil).cuda()
                 output = classifier.model(transformed[None, ...])
-                _, pred = output.topk(1, 1, True, True)
-                classId = pred.t()
-                label_name = classifier.labels[classId]
+                prob = torch.nn.functional.softmax(output, dim=1)
+                print("Classifier probability:", prob.data.cpu().numpy())
+
+                value, pred = prob.topk(1, 1, True, True)
+                if value.item() < CLASSIFIER_THRESHOLD:
+                    continue
+                class_ind = pred.item()
+                label_name = classifier.labels[class_ind]
 
             logger.info('Found label: %s', label_name)
             # logger.info('return transition: %s', str(state.has_class_transitions.keys()))

@@ -132,8 +132,8 @@ def start_http_server(conn, step_names):
     ])
 
     context = ssl.SSLContext()
-    print("IN HTTP SERVER >>>>>>>")
-    print(os.listdir("keys"))
+    # print("IN HTTP SERVER >>>>>>>")
+    # print(os.listdir("keys"))
     context.load_cert_chain(CERTFILE, KEYFILE)
     logger.info("Starting HTTP Server")
     web.run_app(app, ssl_context=context)
