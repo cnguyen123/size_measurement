@@ -93,12 +93,18 @@ def _result_wrapper_for_transition(transition):
     return result_wrapper
 
 
-def _result_wrapper_for(step, zoom_result):
+def _result_wrapper_for(step, zoom_result, audio=None):
     status = gabriel_pb2.ResultWrapper.Status.SUCCESS
     result_wrapper = cognitive_engine.create_result_wrapper(status)
     to_client_extras = owf_pb2.ToClientExtras()
     to_client_extras.step = step
     to_client_extras.zoom_result = zoom_result
+    
+    if audio is not None:
+        result = gabriel_pb2.ResultWrapper.Result()
+        result.payload_type = gabriel_pb2.PayloadType.TEXT
+        result.payload = audio.encode()
+        result_wrapper.results.append(result)
 
     result_wrapper.extras.Pack(to_client_extras)
     return result_wrapper
@@ -323,7 +329,7 @@ class InferenceEngine(cognitive_engine.Engine):
         # ################### Temporary fix
         self._last_label = None
         self._last_count = 0
-        self._step_done = False
+        self._thumbs_up_found = False
         # ################### TODO: Make the server stateless
 
     def handle(self, input_frame):
@@ -344,7 +350,7 @@ class InferenceEngine(cognitive_engine.Engine):
             logger.info('Zoom Stopped. New step: %s', new_step)
             transition = self._states_for_expert_call.get_transition(new_step)
             # ###############################################
-            self._step_done = False
+            self._thumbs_up_found = False
             # ###############################################
             return _result_wrapper_for_transition(transition)
 
@@ -408,13 +414,29 @@ class InferenceEngine(cognitive_engine.Engine):
                 hand_id = np.argmax(prediction)
                 hand_name = self._hand_classes[hand_id]
                 if hand_name == 'thumbs up':
-                    self._step_done = True
+                    if not self._thumbs_up_found:
+                        self._thumbs_up_found = True
+                        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                                                   "Thumbs up detected!")
                     print("Thumbs up detected.")
                 elif hand_name == 'thumbs down':
-                    self._step_done = False
+                    self._thumbs_up_found = False
                     print("Thumbs down detected.")
-                    # TODO: Start a Zoom call on client device
-        if not self._step_done:
+
+                    # Start a Zoom call on client device
+                    if self._on_zoom_call:
+                        return _result_wrapper_for(
+                            step, owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+
+                    msg = {
+                        'zoom_action': 'start',
+                        'step': step
+                    }
+                    self._engine_conn.send(msg)
+                    logger.info('Zoom Started')
+                    return _start_zoom()
+
+        if not self._thumbs_up_found:
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
         # ###############################################
 
@@ -500,7 +522,7 @@ class InferenceEngine(cognitive_engine.Engine):
                             self._last_label = label_name
                             self._last_count = 0
                             # ###############################################
-                            self._step_done = False
+                            self._thumbs_up_found = False
                             # ###############################################
                             return _result_wrapper_for_transition(transition)
                         # ###############################
@@ -519,7 +541,7 @@ class InferenceEngine(cognitive_engine.Engine):
                                 self._last_label = label_name
                                 self._last_count = 0
                                 # ###############################################
-                                self._step_done = False
+                                self._thumbs_up_found = False
                                 # ###############################################
                                 return _result_wrapper_for_transition(transition)
                             # ###############################
@@ -560,7 +582,7 @@ class InferenceEngine(cognitive_engine.Engine):
                     self._last_label = label_name
                     self._last_count = 0
                     # ###############################################
-                    self._step_done = False
+                    self._thumbs_up_found = False
                     # ###############################################
                     return _result_wrapper_for_transition(transition)
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
