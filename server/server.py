@@ -12,6 +12,9 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 
+import mediapipe as mp
+from tensorflow.keras.models import load_model
+
 from object_detection.utils import label_map_util
 
 from torchvision import transforms
@@ -53,6 +56,10 @@ logger = logging.getLogger(__name__)
 _State = namedtuple('_State', ['always_transition', 'has_class_transitions', 'processors'])
 _Classifier = namedtuple('_Classifier', ['model', 'labels'])
 _Detector = namedtuple('_Detector', ['detector', 'category_index'])
+
+mp_drawing = mp.solutions.drawing_utils
+# mp_drawing_styles = mp.solutions.drawing_styles
+mp_hands = mp.solutions.hands
 
 
 def _result_wrapper_for_transition(transition):
@@ -283,6 +290,21 @@ class InferenceEngine(cognitive_engine.Engine):
         ])
         self._states_models = _StatesModels(fsm_file_path)
 
+        # ###############################################
+        # Load the gesture recognizer model
+        # Model Reference: https://techvidvan.com/tutorials/hand-gesture-recognition-tensorflow-opencv/
+        self._hand_model = load_model('../../models/mp_hand_gesture')
+
+        # Load gesture names
+        with open('../../models/gesture.names', 'r') as gesture_file:
+            self._hand_classes = gesture_file.read().split('\n')
+
+        # Reference: https://google.github.io/mediapipe/solutions/hands.html
+        self._hands = mp_hands.Hands(max_num_hands=2,
+                                     min_detection_confidence=0.7,
+                                     min_tracking_confidence=0.7)
+        # ###############################################
+
         start_state = self._states_models.get_start_state()
         assert start_state.always_transition is not None, 'bad start state'
         self._states_for_expert_call = _StatesForExpertCall(
@@ -301,6 +323,7 @@ class InferenceEngine(cognitive_engine.Engine):
         # ################### Temporary fix
         self._last_label = None
         self._last_count = 0
+        self._step_done = False
         # ################### TODO: Make the server stateless
 
     def handle(self, input_frame):
@@ -320,6 +343,9 @@ class InferenceEngine(cognitive_engine.Engine):
             new_step = pipe_output.get('step')
             logger.info('Zoom Stopped. New step: %s', new_step)
             transition = self._states_for_expert_call.get_transition(new_step)
+            # ###############################################
+            self._step_done = False
+            # ###############################################
             return _result_wrapper_for_transition(transition)
 
         step = to_server_extras.step
@@ -356,12 +382,43 @@ class InferenceEngine(cognitive_engine.Engine):
 
         np_data = np.frombuffer(input_frame.payloads[0], dtype=np.uint8)
         img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        # 07/02/2022
-        # img_size_measure = img.copy()
-        #
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        detections = detector.detector(np.expand_dims(img, 0))
 
+        # ############################################### Detecting hand gestures
+        h, w, _ = img.shape
+        result = self._hands.process(img)
+
+        if result.multi_hand_landmarks:
+            num_hands = 0
+            landmarks = []
+            for hand_landmarks in result.multi_hand_landmarks:
+                num_hands += 1
+                # Predict gesture from one hand
+                if not landmarks:
+                    for lm in hand_landmarks.landmark:
+                        # print(id, lm)
+                        # TODO: Note: technically it should be x*width and y*height,
+                        #  but the model seems to be trained in the following way...
+                        lmx = int(lm.x * h)
+                        lmy = int(lm.y * w)
+                        landmarks.append([lmx, lmy])
+
+            if num_hands == 1:
+                prediction = self._hand_model.predict([landmarks])
+                hand_id = np.argmax(prediction)
+                hand_name = self._hand_classes[hand_id]
+                if hand_name == 'thumbs up':
+                    self._step_done = True
+                    print("Thumbs up detected.")
+                elif hand_name == 'thumbs down':
+                    self._step_done = False
+                    print("Thumbs down detected.")
+                    # TODO: Start a Zoom call on client device
+        if not self._step_done:
+            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+        # ###############################################
+
+        detections = detector.detector(np.expand_dims(img, 0))
         scores = detections['detection_scores'][0].numpy()
         boxes = detections['detection_boxes'][0].numpy()
         classes = detections['detection_classes'][0].numpy().astype(int)
@@ -442,6 +499,9 @@ class InferenceEngine(cognitive_engine.Engine):
                         if transition is not None:
                             self._last_label = label_name
                             self._last_count = 0
+                            # ###############################################
+                            self._step_done = False
+                            # ###############################################
                             return _result_wrapper_for_transition(transition)
                         # ###############################
 
@@ -458,6 +518,9 @@ class InferenceEngine(cognitive_engine.Engine):
                             if transition is not None:
                                 self._last_label = label_name
                                 self._last_count = 0
+                                # ###############################################
+                                self._step_done = False
+                                # ###############################################
                                 return _result_wrapper_for_transition(transition)
                             # ###############################
                             self.error_patience += 1
@@ -496,6 +559,9 @@ class InferenceEngine(cognitive_engine.Engine):
                 if transition is not None:
                     self._last_label = label_name
                     self._last_count = 0
+                    # ###############################################
+                    self._step_done = False
+                    # ###############################################
                     return _result_wrapper_for_transition(transition)
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
