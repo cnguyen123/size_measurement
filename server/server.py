@@ -278,10 +278,12 @@ class InferenceEngine(cognitive_engine.Engine):
 
     def __init__(self, fsm_file_path):
         # ############################################ Temp fix
+        # TODO: Add them in the protobuf message to make the server stateless
         self.count_ = 0
         self.error_count = 0
-        self.aruco_patience = 4
+        self.aruco_patience = 3
         self.error_patience = 2
+        self._thumbs_up_found = False
         # ############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -295,6 +297,11 @@ class InferenceEngine(cognitive_engine.Engine):
         ])
         self._states_models = _StatesModels(fsm_file_path)
 
+        # Reference: https://google.github.io/mediapipe/solutions/hands.html
+        self._hands = mp_hands.Hands(max_num_hands=2,
+                                     min_detection_confidence=0.7,
+                                     min_tracking_confidence=0.7)
+
         # ###############################################
         # Load the gesture recognizer model
         # Model Reference: https://techvidvan.com/tutorials/hand-gesture-recognition-tensorflow-opencv/
@@ -303,11 +310,6 @@ class InferenceEngine(cognitive_engine.Engine):
         # Load gesture names
         with open('../../models/gesture.names', 'r') as gesture_file:
             self._hand_classes = gesture_file.read().split('\n')
-
-        # Reference: https://google.github.io/mediapipe/solutions/hands.html
-        self._hands = mp_hands.Hands(max_num_hands=2,
-                                     min_detection_confidence=0.7,
-                                     min_tracking_confidence=0.7)
         # ###############################################
 
         start_state = self._states_models.get_start_state()
@@ -325,15 +327,9 @@ class InferenceEngine(cognitive_engine.Engine):
 
         self._on_zoom_call = False
 
-        # ################### Temporary fix
-        self._thumbs_up_found = False
-        # ################### TODO: Make the server stateless
-
     def handle(self, input_frame):
-
         to_server_extras = cognitive_engine.unpack_extras(
             owf_pb2.ToServerExtras, input_frame)
-
         print('.', end='')
 
         if (to_server_extras.zoom_status ==
@@ -476,13 +472,8 @@ class InferenceEngine(cognitive_engine.Engine):
         print()
         print("Detector boxes:", box_scores)
         for best_box in good_boxes:
-            # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/research/object_detection/utils/visualization_utils.py#L1232
             ymin, xmin, ymax, xmax = best_box
-
-            # from https://github.com/tensorflow/models/blob/39f98e30e7fb51c8b7ad58b0fc65ee5312829deb/official/vision/detection/utils/object_detection/visualization_utils.py#L192
-            (left, right, top, bottom) = (
-                xmin * im_width, xmax * im_width,
-                ymin * im_height, ymax * im_height)
+            (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
 
             # ########################### size measurement
             if detector_class_name == "bolt":
@@ -492,7 +483,6 @@ class InferenceEngine(cognitive_engine.Engine):
 
                 if re1 == -2:
                     # Possibly a false positive detection - detecting the aruco marker as the bolt
-                    label_name = None
                     self.count_ = 0
                     self.error_count = 0
                     continue
@@ -503,9 +493,11 @@ class InferenceEngine(cognitive_engine.Engine):
                     self.count_ += 1
                     # Increasing patience for reporting aruco error
                     if self.count_ >= self.aruco_patience:
-                        label_name = "aruco_error"
                         self.count_ = 0
-                        self.aruco_patience += 5
+                        self._thumbs_up_found = False
+                        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                                                   "Please place the bolt near the aruco marker, and make sure "
+                                                   "the marker is fully shown.")
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
@@ -520,9 +512,11 @@ class InferenceEngine(cognitive_engine.Engine):
                         self.error_count += 1
                         # Increasing patience for reporting wrong length error
                         if self.error_count >= self.error_patience:
-                            label_name = "error"
                             self.error_count = 0
-                            self.error_patience += 1
+                            self._thumbs_up_found = False
+                            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                                                       "This seems to be a bolt with the incorrect length. "
+                                                       "Please put it away and find a 12 millimeter bolt again.")
             # ########################### end size measurement
 
             else:
