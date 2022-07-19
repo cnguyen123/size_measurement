@@ -6,19 +6,18 @@ import io
 import os
 from collections import namedtuple
 from multiprocessing import Process, Pipe
-import measure_object_size as ms
+
 import cv2
 import numpy as np
-import tensorflow as tf
 from PIL import Image
-
 import mediapipe as mp
-from tensorflow.keras.models import load_model
 
+import tensorflow as tf
 from object_detection.utils import label_map_util
 
-from torchvision import transforms
 import torch
+from torchvision import transforms
+
 from gabriel_server import cognitive_engine
 from gabriel_server import local_engine
 from gabriel_protocol import gabriel_pb2
@@ -28,6 +27,9 @@ import http_server
 import mpncov
 import owf_pb2
 import wca_state_machine_pb2
+
+import measure_object_size as ms
+import hand_gestures as hg
 
 SOURCE = 'owf_client'
 INPUT_QUEUE_MAXSIZE = 60
@@ -302,16 +304,6 @@ class InferenceEngine(cognitive_engine.Engine):
                                      min_detection_confidence=0.7,
                                      min_tracking_confidence=0.7)
 
-        # ###############################################
-        # Load the gesture recognizer model
-        # Model Reference: https://techvidvan.com/tutorials/hand-gesture-recognition-tensorflow-opencv/
-        self._hand_model = load_model('../../models/mp_hand_gesture')
-
-        # Load gesture names
-        with open('../../models/gesture.names', 'r') as gesture_file:
-            self._hand_classes = gesture_file.read().split('\n')
-        # ###############################################
-
         start_state = self._states_models.get_start_state()
         assert start_state.always_transition is not None, 'bad start state'
         self._states_for_expert_call = _StatesForExpertCall(
@@ -384,55 +376,41 @@ class InferenceEngine(cognitive_engine.Engine):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         # ############################################### Detecting hand gestures
-        h, w, _ = img.shape
         result = self._hands.process(img)
+        if result.multi_hand_landmarks and len(result.multi_hand_landmarks) == 1:
+            hand_landmark = result.multi_hand_landmarks[0].landmark
+            thumb_state = hg.get_thumb_state(hand_landmark, img.shape)
 
-        if result.multi_hand_landmarks:
-            num_hands = 0
-            landmarks = []
-            for hand_landmarks in result.multi_hand_landmarks:
-                num_hands += 1
-                # Predict gesture from one hand
-                if not landmarks:
-                    for lm in hand_landmarks.landmark:
-                        # print(id, lm)
-                        # TODO: Note: technically it should be x*width and y*height,
-                        #  but the model seems to be trained in the following way...
-                        lmx = int(lm.x * h)
-                        lmy = int(lm.y * w)
-                        landmarks.append([lmx, lmy])
+            if thumb_state == 'thumbs up':
+                print("Thumbs up detected.")
+                if not self._thumbs_up_found:
+                    self._thumbs_up_found = True
+                    return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                                               "Thumbs up detected!")
 
-            if num_hands == 1:
-                prediction = self._hand_model.predict([landmarks])
-                hand_id = np.argmax(prediction)
-                hand_name = self._hand_classes[hand_id]
-                if hand_name == 'thumbs up':
-                    if not self._thumbs_up_found:
-                        self._thumbs_up_found = True
-                        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                                                   "Thumbs up detected!")
-                    print("Thumbs up detected.")
-                elif hand_name == 'thumbs down':
-                    self._thumbs_up_found = False
-                    print("Thumbs down detected.")
+            elif thumb_state == 'thumbs down':
+                self._thumbs_up_found = False
+                print("Thumbs down detected.")
 
-                    # TODO: Change this to setting "thumbs-down-detected" flag in toClientExtras
-                    # Send back an audio instruction to the client (Thumbs down detected)
-                    # Then later start zoom after the server find this flag in toServerExtras again
-                    # Or, check consecutive thumbs-down for robustness
+                # TODO: Change this to setting "thumbs-down-detected" flag in toClientExtras
+                # Send back an audio instruction to the client (Thumbs down detected)
+                # Then later start zoom after the server find this flag in toServerExtras again
+                # Or, check consecutive thumbs-down for robustness
+                # return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                #                            "Thumbs down detected! Calling expert now.")
 
-                    # Start a Zoom call on client device
-                    if self._on_zoom_call:
-                        return _result_wrapper_for(
-                            step, owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+                # Start a Zoom call on client device
+                if self._on_zoom_call:
+                    return _result_wrapper_for(
+                        step, owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
 
-                    msg = {
-                        'zoom_action': 'start',
-                        'step': step
-                    }
-                    self._engine_conn.send(msg)
-                    logger.info('Zoom Started')
-                    return _start_zoom()
+                msg = {
+                    'zoom_action': 'start',
+                    'step': step
+                }
+                self._engine_conn.send(msg)
+                logger.info('Zoom Started')
+                return _start_zoom()
 
         if not self._thumbs_up_found:
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
