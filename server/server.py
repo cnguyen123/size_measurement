@@ -277,13 +277,12 @@ class _StatesForExpertCall:
 class InferenceEngine(cognitive_engine.Engine):
 
     def __init__(self, fsm_file_path):
-        #############################################
-        self.image_count = 0
+        # ############################################ Temp fix
         self.count_ = 0
         self.error_count = 0
         self.aruco_patience = 4
         self.error_patience = 2
-        #############################################
+        # ############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -327,8 +326,6 @@ class InferenceEngine(cognitive_engine.Engine):
         self._on_zoom_call = False
 
         # ################### Temporary fix
-        self._last_label = None
-        self._last_count = 0
         self._thumbs_up_found = False
         # ################### TODO: Make the server stateless
 
@@ -423,6 +420,11 @@ class InferenceEngine(cognitive_engine.Engine):
                     self._thumbs_up_found = False
                     print("Thumbs down detected.")
 
+                    # TODO: Change this to setting "thumbs-down-detected" flag in toClientExtras
+                    # Send back an audio instruction to the client (Thumbs down detected)
+                    # Then later start zoom after the server find this flag in toServerExtras again
+                    # Or, check consecutive thumbs-down for robustness
+
                     # Start a Zoom call on client device
                     if self._on_zoom_call:
                         return _result_wrapper_for(
@@ -469,8 +471,6 @@ class InferenceEngine(cognitive_engine.Engine):
                 box_scores.insert(bi, score)
 
         if not good_boxes:
-            self._last_label = None
-            self._last_count = 1
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
         print()
@@ -484,7 +484,7 @@ class InferenceEngine(cognitive_engine.Engine):
                 xmin * im_width, xmax * im_width,
                 ymin * im_height, ymax * im_height)
 
-            # size measurement
+            # ########################### size measurement
             if detector_class_name == "bolt":
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
                                             xmax * im_width, ymax * im_height)
@@ -504,49 +504,26 @@ class InferenceEngine(cognitive_engine.Engine):
                     # Increasing patience for reporting aruco error
                     if self.count_ >= self.aruco_patience:
                         label_name = "aruco_error"
-                    if self.count_ >= self.aruco_patience + 1:
                         self.count_ = 0
                         self.aruco_patience += 5
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
-                    print("Object length: ", size_ob, "mm")
+                    print("Object length:", size_ob, "mm")
 
                     self.count_ = 0
                     if size_ob in range(12 - 2, 12 + 14):
                         label_name = "bolt12"
                         self.error_count = 0
-                        # ############################### Temp fix
-                        transition = state.has_class_transitions.get(label_name)
-                        if transition is not None:
-                            self._last_label = label_name
-                            self._last_count = 0
-                            # ###############################################
-                            self._thumbs_up_found = False
-                            # ###############################################
-                            return _result_wrapper_for_transition(transition)
-                        # ###############################
-
                     else:
                         label_name = None
                         self.error_count += 1
                         # Increasing patience for reporting wrong length error
                         if self.error_count >= self.error_patience:
                             label_name = "error"
-                        if self.error_count >= self.error_patience + 1:
                             self.error_count = 0
-                            # ############################### Temp fix
-                            transition = state.has_class_transitions.get(label_name)
-                            if transition is not None:
-                                self._last_label = label_name
-                                self._last_count = 0
-                                # ###############################################
-                                self._thumbs_up_found = False
-                                # ###############################################
-                                return _result_wrapper_for_transition(transition)
-                            # ###############################
                             self.error_patience += 1
-            # end size measurement
+            # ########################### end size measurement
 
             else:
                 cropped_pil = pil_img.crop((left, top, right, bottom))
@@ -566,30 +543,13 @@ class InferenceEngine(cognitive_engine.Engine):
             # logger.info('current state name on server is: %s', step)
 
             if label_name is not None:
-                if self._last_label == label_name:
-                    self._last_count += 1
-                else:
-                    self._last_label = label_name
-                    self._last_count = 0
-            else:
-                self._last_label = None
-                self._last_count = 0
-            # Confirm results in two consecutive images
-            if self._last_count == 1:
-                # Note that a state will never transition to itself again in OWF
                 transition = state.has_class_transitions.get(label_name)
                 if transition is not None:
-                    self._last_label = label_name
-                    self._last_count = 0
-                    # ###############################################
                     self._thumbs_up_found = False
-                    # ###############################################
                     return _result_wrapper_for_transition(transition)
             return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
 
         # Good boxes do not contain any valid steps
-        self._last_label = None
-        self._last_count = 0
         self.count_ = 0
         self.error_count = 0
         return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
