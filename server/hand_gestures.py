@@ -125,7 +125,7 @@ def get_hand_state(landmarks, shape):
 
 def get_thumb_state(hand_landmark, shape):
     hand_state = get_hand_state(hand_landmark, shape)
-    print(hand_state)
+    # print(hand_state)
     thumb_state = ""
 
     # Check if thumb open and other fingers closed

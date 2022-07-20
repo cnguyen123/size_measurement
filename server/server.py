@@ -61,8 +61,6 @@ _State = namedtuple('_State', ['always_transition', 'has_class_transitions', 'pr
 _Classifier = namedtuple('_Classifier', ['model', 'labels'])
 _Detector = namedtuple('_Detector', ['detector', 'category_index'])
 
-mp_drawing = mp.solutions.drawing_utils
-# mp_drawing_styles = mp.solutions.drawing_styles
 mp_hands = mp.solutions.hands
 
 
@@ -93,8 +91,8 @@ def _result_wrapper_for_transition(transition):
     to_client_extras.step = transition.next_state
     to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.NO_CALL
 
-    # TODO: Whether to clear the "thumbs-up" or not depends on whether the next
-    #       state is "gated" or not
+    # TODO: Whether to clear the 'thumbs-up' or not depends on whether the next
+    #       state is 'gated' or not
     to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
 
     result_wrapper.extras.Pack(to_client_extras)
@@ -399,19 +397,19 @@ class InferenceEngine(cognitive_engine.Engine):
             thumb_state = hg.get_thumb_state(hand_landmark, img.shape)
 
             if thumb_state == 'thumbs up':
-                print("Thumbs up detected.")
+                print('Thumbs up detected.')
                 if not self._thumbs_up_found:
                     self._thumbs_up_found = True
-                    thumbs_up_audio = "Thumbs up detected!" if DEBUG_AUDIO else None
+                    thumbs_up_audio = 'Thumbs up detected!' if DEBUG_AUDIO else None
                     return _result_wrapper_for(step, audio=thumbs_up_audio,
                                                user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
             elif thumb_state == 'thumbs down':
                 self._thumbs_up_found = False
-                print("Thumbs down detected.")
+                print('Thumbs down detected.')
 
                 # return _result_wrapper_for(step,
-                #                            audio="Thumbs down detected! Calling expert now.")
+                #                            audio='Thumbs down detected! Calling expert now.')
 
                 # Try to start a Zoom call
                 if self._on_zoom_call:
@@ -433,6 +431,8 @@ class InferenceEngine(cognitive_engine.Engine):
             return _result_wrapper_for(step)
         # ###############################################
 
+        # Insert a new axis to make an input tensor of shape (1, h, w, channel)
+        # For Google Glass, the input shape is (1, 1080, 1920, 3)
         detections = detector.detector(np.expand_dims(img, 0))
         scores = detections['detection_scores'][0].numpy()
         boxes = detections['detection_boxes'][0].numpy()
@@ -465,13 +465,13 @@ class InferenceEngine(cognitive_engine.Engine):
             return _result_wrapper_for(step)
 
         print()
-        print("Detector boxes:", box_scores)
+        print('Detector boxes:', box_scores)
         for best_box in good_boxes:
             ymin, xmin, ymax, xmax = best_box
             (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
 
             # ########################### size measurement
-            if detector_class_name == "bolt":
+            if detector_class_name == 'bolt':
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
                                             xmax * im_width, ymax * im_height)
                 img, re1, size_ob = ms.size_measuring(xmin, ymin, xmax, ymax, img)
@@ -482,7 +482,7 @@ class InferenceEngine(cognitive_engine.Engine):
                     self.error_count = 0
                     continue
                 elif re1 == -1:
-                    print("The marker is not fully shown...")
+                    print('The marker is not fully shown...')
                     label_name = None
                     self.error_count = 0
                     self.count_ += 1
@@ -491,17 +491,17 @@ class InferenceEngine(cognitive_engine.Engine):
                         self.count_ = 0
                         self._thumbs_up_found = False
                         return _result_wrapper_for(step,
-                                                   audio="Please place the bolt near the aruco marker, and make sure "
-                                                   "the marker is fully shown.",
+                                                   audio='Please place the bolt near the aruco marker, and make sure '
+                                                   'the marker is fully shown.',
                                                    user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
-                    print("Object length:", size_ob, "mm")
+                    print('Object length:', size_ob, 'mm')
 
                     self.count_ = 0
                     if size_ob in range(12 - 2, 12 + 14):
-                        label_name = "bolt12"
+                        label_name = 'bolt12'
                         self.error_count = 0
                     else:
                         label_name = None
@@ -511,8 +511,8 @@ class InferenceEngine(cognitive_engine.Engine):
                             self.error_count = 0
                             self._thumbs_up_found = False
                             return _result_wrapper_for(step,
-                                                       audio="This seems to be a bolt with the incorrect length. "
-                                                       "Please put it away and find a 12 millimeter bolt again.",
+                                                       audio='This seems to be a bolt with the incorrect length. '
+                                                       'Please put it away and find a 12 millimeter bolt again.',
                                                        user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
             # ###########################
 
@@ -521,7 +521,7 @@ class InferenceEngine(cognitive_engine.Engine):
                 transformed = self._transform(cropped_pil).cuda()
                 output = classifier.model(transformed[None, ...])
                 prob = torch.nn.functional.softmax(output, dim=1)
-                print("Classifier probability:", prob.data.cpu().numpy())
+                print('Classifier probability:', prob.data.cpu().numpy())
 
                 value, pred = prob.topk(1, 1, True, True)
                 if value.item() < CLASSIFIER_THRESHOLD:
