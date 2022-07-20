@@ -31,6 +31,8 @@ import wca_state_machine_pb2
 import measure_object_size as ms
 import hand_gestures as hg
 
+DEBUG_AUDIO = True
+
 SOURCE = 'owf_client'
 INPUT_QUEUE_MAXSIZE = 60
 PORT = 9099
@@ -95,7 +97,7 @@ def _result_wrapper_for_transition(transition):
     return result_wrapper
 
 
-def _result_wrapper_for(step, zoom_result, audio=None):
+def _result_wrapper_for(step, zoom_result=owf_pb2.ToClientExtras.ZoomResult.NO_CALL, audio=None):
     status = gabriel_pb2.ResultWrapper.Status.SUCCESS
     result_wrapper = cognitive_engine.create_result_wrapper(status)
     to_client_extras = owf_pb2.ToClientExtras()
@@ -345,8 +347,8 @@ class InferenceEngine(cognitive_engine.Engine):
         elif (to_server_extras.zoom_status ==
               owf_pb2.ToServerExtras.ZoomStatus.START):
             if self._on_zoom_call:
-                return _result_wrapper_for(
-                    step, owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+                return _result_wrapper_for(step,
+                                           zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
 
             msg = {
                 'zoom_action': 'start',
@@ -362,8 +364,7 @@ class InferenceEngine(cognitive_engine.Engine):
             return _result_wrapper_for_transition(state.always_transition)
 
         if len(state.processors) == 0:
-            return _result_wrapper_for(
-                step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+            return _result_wrapper_for(step)
 
         assert len(state.processors) == 1, 'wrong number of processors'
         processor = state.processors[0]
@@ -385,25 +386,20 @@ class InferenceEngine(cognitive_engine.Engine):
                 print("Thumbs up detected.")
                 if not self._thumbs_up_found:
                     self._thumbs_up_found = True
-                    return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                                               "Thumbs up detected!")
+                    thumbs_up_audio = "Thumbs up detected!" if DEBUG_AUDIO else None
+                    return _result_wrapper_for(step, audio=thumbs_up_audio)
 
             elif thumb_state == 'thumbs down':
                 self._thumbs_up_found = False
                 print("Thumbs down detected.")
 
-                # TODO: Change this to setting "thumbs-down-detected" flag in toClientExtras
-                # Send back an audio instruction to the client (Thumbs down detected)
-                # Then later start zoom after the server find this flag in toServerExtras again
-                # Or, check consecutive thumbs-down for robustness
-                # return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                #                            "Thumbs down detected! Calling expert now.")
+                # return _result_wrapper_for(step,
+                #                            audio="Thumbs down detected! Calling expert now.")
 
-                # Start a Zoom call on client device
+                # Try to start a Zoom call
                 if self._on_zoom_call:
-                    return _result_wrapper_for(
-                        step, owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
-
+                    return _result_wrapper_for(step,
+                                               zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
                 msg = {
                     'zoom_action': 'start',
                     'step': step
@@ -413,7 +409,7 @@ class InferenceEngine(cognitive_engine.Engine):
                 return _start_zoom()
 
         if not self._thumbs_up_found:
-            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+            return _result_wrapper_for(step)
         # ###############################################
 
         detections = detector.detector(np.expand_dims(img, 0))
@@ -445,7 +441,7 @@ class InferenceEngine(cognitive_engine.Engine):
                 box_scores.insert(bi, score)
 
         if not good_boxes:
-            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+            return _result_wrapper_for(step)
 
         print()
         print("Detector boxes:", box_scores)
@@ -473,8 +469,8 @@ class InferenceEngine(cognitive_engine.Engine):
                     if self.count_ >= self.aruco_patience:
                         self.count_ = 0
                         self._thumbs_up_found = False
-                        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                                                   "Please place the bolt near the aruco marker, and make sure "
+                        return _result_wrapper_for(step,
+                                                   audio="Please place the bolt near the aruco marker, and make sure "
                                                    "the marker is fully shown.")
                 else:
                     # from cm to mm
@@ -492,10 +488,10 @@ class InferenceEngine(cognitive_engine.Engine):
                         if self.error_count >= self.error_patience:
                             self.error_count = 0
                             self._thumbs_up_found = False
-                            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                                                       "This seems to be a bolt with the incorrect length. "
+                            return _result_wrapper_for(step,
+                                                       audio="This seems to be a bolt with the incorrect length. "
                                                        "Please put it away and find a 12 millimeter bolt again.")
-            # ########################### end size measurement
+            # ###########################
 
             else:
                 cropped_pil = pil_img.crop((left, top, right, bottom))
@@ -519,12 +515,12 @@ class InferenceEngine(cognitive_engine.Engine):
                 if transition is not None:
                     self._thumbs_up_found = False
                     return _result_wrapper_for_transition(transition)
-            return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+            return _result_wrapper_for(step)
 
         # Good boxes do not contain any valid steps
         self.count_ = 0
         self.error_count = 0
-        return _result_wrapper_for(step, owf_pb2.ToClientExtras.ZoomResult.NO_CALL)
+        return _result_wrapper_for(step)
 
 
 def main():
