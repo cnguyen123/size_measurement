@@ -24,6 +24,12 @@ message ToClientExtras {
         EXPERT_BUSY = 2;
     }
     ZoomResult zoom_result = 3;
+    enum UserReady {
+        NO_CHANGE = 0;
+        SET = 1;
+        CLEAR = 2;
+    }
+    UserReady user_ready = 4;
 }
 
 message ZoomInfo {

@@ -93,16 +93,24 @@ def _result_wrapper_for_transition(transition):
     to_client_extras.step = transition.next_state
     to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.NO_CALL
 
+    # TODO: Whether to clear the "thumbs-up" or not depends on whether the next
+    #       state is "gated" or not
+    to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
+
     result_wrapper.extras.Pack(to_client_extras)
     return result_wrapper
 
 
-def _result_wrapper_for(step, zoom_result=owf_pb2.ToClientExtras.ZoomResult.NO_CALL, audio=None):
+def _result_wrapper_for(step,
+                        zoom_result=owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                        audio=None,
+                        user_ready=owf_pb2.ToClientExtras.UserReady.NO_CHANGE):
     status = gabriel_pb2.ResultWrapper.Status.SUCCESS
     result_wrapper = cognitive_engine.create_result_wrapper(status)
     to_client_extras = owf_pb2.ToClientExtras()
     to_client_extras.step = step
     to_client_extras.zoom_result = zoom_result
+    to_client_extras.user_ready = user_ready
     
     if audio is not None:
         result = gabriel_pb2.ResultWrapper.Result()
@@ -119,6 +127,7 @@ def _start_zoom():
     result_wrapper = cognitive_engine.create_result_wrapper(status)
     to_client_extras = owf_pb2.ToClientExtras()
     to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.CALL_START
+    to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
 
     zoom_info = owf_pb2.ZoomInfo()
     zoom_info.app_key = credentials.ANDROID_KEY
@@ -356,13 +365,20 @@ class InferenceEngine(cognitive_engine.Engine):
             }
             self._engine_conn.send(msg)
             logger.info('Zoom Started')
+            # ###############################################
+            self._thumbs_up_found = False
+            # ###############################################
             return _start_zoom()
         else:
             state = self._states_models.get_state(step)
 
         if state.always_transition is not None:
+            # ###############################################
+            self._thumbs_up_found = False
+            # ###############################################
             return _result_wrapper_for_transition(state.always_transition)
 
+        # End state reached
         if len(state.processors) == 0:
             return _result_wrapper_for(step)
 
@@ -387,7 +403,8 @@ class InferenceEngine(cognitive_engine.Engine):
                 if not self._thumbs_up_found:
                     self._thumbs_up_found = True
                     thumbs_up_audio = "Thumbs up detected!" if DEBUG_AUDIO else None
-                    return _result_wrapper_for(step, audio=thumbs_up_audio)
+                    return _result_wrapper_for(step, audio=thumbs_up_audio,
+                                               user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
             elif thumb_state == 'thumbs down':
                 self._thumbs_up_found = False
@@ -406,9 +423,13 @@ class InferenceEngine(cognitive_engine.Engine):
                 }
                 self._engine_conn.send(msg)
                 logger.info('Zoom Started')
+                # ###############################################
+                self._thumbs_up_found = False
+                # ###############################################
                 return _start_zoom()
 
         if not self._thumbs_up_found:
+            # User not ready yet, return without running the two phase object detection
             return _result_wrapper_for(step)
         # ###############################################
 
@@ -471,7 +492,8 @@ class InferenceEngine(cognitive_engine.Engine):
                         self._thumbs_up_found = False
                         return _result_wrapper_for(step,
                                                    audio="Please place the bolt near the aruco marker, and make sure "
-                                                   "the marker is fully shown.")
+                                                   "the marker is fully shown.",
+                                                   user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
@@ -490,7 +512,8 @@ class InferenceEngine(cognitive_engine.Engine):
                             self._thumbs_up_found = False
                             return _result_wrapper_for(step,
                                                        audio="This seems to be a bolt with the incorrect length. "
-                                                       "Please put it away and find a 12 millimeter bolt again.")
+                                                       "Please put it away and find a 12 millimeter bolt again.",
+                                                       user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
             # ###########################
 
             else:
@@ -513,7 +536,9 @@ class InferenceEngine(cognitive_engine.Engine):
             if label_name is not None:
                 transition = state.has_class_transitions.get(label_name)
                 if transition is not None:
+                    # ###############################################
                     self._thumbs_up_found = False
+                    # ###############################################
                     return _result_wrapper_for_transition(transition)
             return _result_wrapper_for(step)
 

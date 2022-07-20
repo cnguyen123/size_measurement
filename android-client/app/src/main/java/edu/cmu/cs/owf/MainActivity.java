@@ -13,6 +13,8 @@ import androidx.camera.view.PreviewView;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.AssetManager;
+import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
@@ -28,6 +30,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 import java.util.function.Consumer;
 
@@ -67,9 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private CameraCapture cameraCapture;
 
     private TextToSpeech textToSpeech;
-    private ImageViewUpdater cropViewUpdater;
     private ImageViewUpdater instructionViewUpdater;
     private ImageView instructionImage;
+    private ImageView readyView;
     private VideoView instructionVideo;
     private File videoFile;
 
@@ -113,8 +116,17 @@ public class MainActivity extends AppCompatActivity {
                     alertDialog.show();
                 });
             }
-
             step = toClientExtras.getStep();
+
+            if (toClientExtras.getUserReady() == ToClientExtras.UserReady.SET) {
+                runOnUiThread(() -> {
+                    readyView.setVisibility(View.VISIBLE);
+                });
+            } else if (toClientExtras.getUserReady() == ToClientExtras.UserReady.CLEAR) {
+                runOnUiThread(() -> {
+                    readyView.setVisibility(View.INVISIBLE);
+                });
+            }
 
         } catch (InvalidProtocolBufferException e) {
             Log.e(TAG, "Protobuf parse error", e);
@@ -128,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
         for (ResultWrapper.Result result : resultWrapper.getResultsList()) {
             if (result.getPayloadType() == PayloadType.VIDEO) {
                 hasVideo = true;
+                break;
             }
         }
 
@@ -135,8 +148,7 @@ public class MainActivity extends AppCompatActivity {
             if (result.getPayloadType() == PayloadType.TEXT) {
                 ByteString dataString = result.getPayload();
                 String speech = dataString.toStringUtf8();
-                this.textToSpeech.speak(speech, TextToSpeech.QUEUE_ADD, null, null);
-
+                this.textToSpeech.speak(speech, TextToSpeech.QUEUE_FLUSH, null, null);
                 Log.i(TAG, "Saying: " + speech);
             } else if ((result.getPayloadType() == PayloadType.IMAGE) && !hasVideo) {
                 ByteString image = result.getPayload();
@@ -175,10 +187,19 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         videoFile = new File(this.getCacheDir(), VIDEO_NAME);
-
         PreviewView viewFinder = findViewById(R.id.viewFinder);
-        ImageView cropView = findViewById(R.id.cropView);
-        cropViewUpdater = new ImageViewUpdater(cropView);
+
+        readyView = findViewById(R.id.readyView);
+        AssetManager assetManager = getAssets();
+        try
+        {
+            InputStream ins = assetManager.open("thumbs_up.png");
+            Drawable drawable = Drawable.createFromStream(ins, null);
+            readyView.setImageDrawable(drawable);
+            ins.close();
+        }
+        catch(IOException ignored) {}
+
         instructionImage = findViewById(R.id.instructionImage);
         instructionViewUpdater = new ImageViewUpdater(instructionImage);
 
