@@ -44,11 +44,13 @@ ALWAYS = 'Always'
 HAS_OBJECT_CLASS = 'HasObjectClass'
 CLASS_NAME = 'class_name'
 TWO_STAGE_PROCESSOR = 'TwoStageProcessor'
-DUMMY_PROCESSOR = 'DummyProcessor'
+GATED_TWO_STAGE_PROCESSOR = 'GatedTwoStageProcessor'
 CLASSIFIER_PATH = 'classifier_path'
 DETECTOR_PATH = 'detector_path'
 DETECTOR_CLASS_NAME = 'detector_class_name'
 CONF_THRESHOLD = 'conf_threshold'
+THUMBS_UP_REQUIRED = 'thumbs_up_required'
+TRANSITION_WORD = 'transition_word'  # Not implemented
 
 LABELS_FILENAME = 'classes.txt'
 CLASSIFIER_FILENAME = 'model_best.pth.tar'
@@ -68,81 +70,6 @@ aruco_error_audio = 'Please place the bolt near the aruco marker, and make sure 
                     'the marker is fully shown.'
 length_error_audio = 'This seems to be a bolt with the incorrect length. ' \
                      'Please put it away and find a 12 millimeter bolt again.'
-
-
-def _result_wrapper_for_transition(transition):
-    status = gabriel_pb2.ResultWrapper.Status.SUCCESS
-    result_wrapper = cognitive_engine.create_result_wrapper(status)
-
-    logger.info('sending %s', transition.instruction.audio)
-
-    result = gabriel_pb2.ResultWrapper.Result()
-    result.payload_type = gabriel_pb2.PayloadType.TEXT
-    result.payload = transition.instruction.audio.encode()
-    result_wrapper.results.append(result)
-
-    if len(transition.instruction.image) > 0:
-        result = gabriel_pb2.ResultWrapper.Result()
-        result.payload_type = gabriel_pb2.PayloadType.IMAGE
-        result.payload = transition.instruction.image
-        result_wrapper.results.append(result)
-
-    if len(transition.instruction.video) > 0:
-        result = gabriel_pb2.ResultWrapper.Result()
-        result.payload_type = gabriel_pb2.PayloadType.VIDEO
-        result.payload = transition.instruction.video
-        result_wrapper.results.append(result)
-
-    to_client_extras = owf_pb2.ToClientExtras()
-    to_client_extras.step = transition.next_state
-    to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.NO_CALL
-
-    # TODO: Whether to clear the 'thumbs-up' or not depends on whether the next
-    #       state is 'gated' or not
-    to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
-
-    result_wrapper.extras.Pack(to_client_extras)
-    return result_wrapper
-
-
-def _result_wrapper_for(step,
-                        zoom_result=owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
-                        audio=None,
-                        user_ready=owf_pb2.ToClientExtras.UserReady.NO_CHANGE):
-    status = gabriel_pb2.ResultWrapper.Status.SUCCESS
-    result_wrapper = cognitive_engine.create_result_wrapper(status)
-    to_client_extras = owf_pb2.ToClientExtras()
-    to_client_extras.step = step
-    to_client_extras.zoom_result = zoom_result
-    to_client_extras.user_ready = user_ready
-    
-    if audio is not None:
-        result = gabriel_pb2.ResultWrapper.Result()
-        result.payload_type = gabriel_pb2.PayloadType.TEXT
-        result.payload = audio.encode()
-        result_wrapper.results.append(result)
-
-    result_wrapper.extras.Pack(to_client_extras)
-    return result_wrapper
-
-
-def _start_zoom():
-    status = gabriel_pb2.ResultWrapper.Status.SUCCESS
-    result_wrapper = cognitive_engine.create_result_wrapper(status)
-    to_client_extras = owf_pb2.ToClientExtras()
-    to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.CALL_START
-    to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
-
-    zoom_info = owf_pb2.ZoomInfo()
-    zoom_info.app_key = credentials.ANDROID_KEY
-    zoom_info.app_secret = credentials.ANDROID_SECRET
-    zoom_info.meeting_number = credentials.MEETING_NUMBER
-    zoom_info.meeting_password = credentials.MEETING_PASSWORD
-
-    to_client_extras.zoom_info.CopyFrom(zoom_info)
-
-    result_wrapper.extras.Pack(to_client_extras)
-    return result_wrapper
 
 
 class _StatesModels:
@@ -194,46 +121,46 @@ class _StatesModels:
         self._start_state = self._states[pb_fsm.start_state]
 
     def _load_models(self, processor):
-        assert processor.callable_name in [TWO_STAGE_PROCESSOR, DUMMY_PROCESSOR], 'bad processor'
+        assert processor.callable_name in [TWO_STAGE_PROCESSOR, GATED_TWO_STAGE_PROCESSOR], \
+            'bad processor'
         callable_args = json.loads(processor.callable_args)
 
-        if processor.callable_name == TWO_STAGE_PROCESSOR:
-            classifier_dir = callable_args[CLASSIFIER_PATH]
-            if classifier_dir not in self._classifiers:
-                labels_file = open(os.path.join(classifier_dir, LABELS_FILENAME))
-                labels = ast.literal_eval(labels_file.read())
+        classifier_dir = callable_args[CLASSIFIER_PATH]
+        if classifier_dir not in self._classifiers:
+            labels_file = open(os.path.join(classifier_dir, LABELS_FILENAME))
+            labels = ast.literal_eval(labels_file.read())
 
-                freezed_layer = 0
-                model = mpncov.Newmodel(self._classifier_representation.copy(),
-                                        len(labels), freezed_layer)
-                model.features = torch.nn.DataParallel(model.features)
-                model.cuda()
-                trained_model = torch.load(os.path.join(classifier_dir,
-                                                        CLASSIFIER_FILENAME))
-                model.load_state_dict(trained_model['state_dict'])
-                model.eval()
+            freezed_layer = 0
+            model = mpncov.Newmodel(self._classifier_representation.copy(),
+                                    len(labels), freezed_layer)
+            model.features = torch.nn.DataParallel(model.features)
+            model.cuda()
+            trained_model = torch.load(os.path.join(classifier_dir,
+                                                    CLASSIFIER_FILENAME))
+            model.load_state_dict(trained_model['state_dict'])
+            model.eval()
 
-                self._classifiers[classifier_dir] = _Classifier(
-                    model=model, labels=labels)
+            self._classifiers[classifier_dir] = _Classifier(
+                model=model, labels=labels)
 
-            detector_dir = callable_args[DETECTOR_PATH]
+        detector_dir = callable_args[DETECTOR_PATH]
 
-            if detector_dir not in self._object_detectors:
-                detector = tf.saved_model.load(detector_dir)
-                ones = tf.ones(DETECTOR_ONES_SIZE, dtype=tf.uint8)
-                detector(ones)
+        if detector_dir not in self._object_detectors:
+            detector = tf.saved_model.load(detector_dir)
+            ones = tf.ones(DETECTOR_ONES_SIZE, dtype=tf.uint8)
+            detector(ones)
 
-                label_map_path = os.path.join(detector_dir, LABEL_MAP_FILENAME)
-                label_map = label_map_util.load_labelmap(label_map_path)
-                categories = label_map_util.convert_label_map_to_categories(
-                    label_map,
-                    max_num_classes=label_map_util.get_max_label_map_index(
-                        label_map),
-                    use_display_name=True)
-                category_index = label_map_util.create_category_index(categories)
+            label_map_path = os.path.join(detector_dir, LABEL_MAP_FILENAME)
+            label_map = label_map_util.load_labelmap(label_map_path)
+            categories = label_map_util.convert_label_map_to_categories(
+                label_map,
+                max_num_classes=label_map_util.get_max_label_map_index(
+                    label_map),
+                use_display_name=True)
+            category_index = label_map_util.create_category_index(categories)
 
-                self._object_detectors[detector_dir] = _Detector(
-                    detector=detector, category_index=category_index)
+            self._object_detectors[detector_dir] = _Detector(
+                detector=detector, category_index=category_index)
 
     def get_classifier(self, path):
         return self._classifiers[path]
@@ -289,6 +216,11 @@ class _StatesForExpertCall:
         return self._transition_to_state[name]
 
 
+def _thumbs_up_required(processor):
+    return (processor.callable_name == GATED_TWO_STAGE_PROCESSOR and
+            json.loads(processor.callable_args)[THUMBS_UP_REQUIRED].strip().lower() == "true")
+
+
 class InferenceEngine(cognitive_engine.Engine):
 
     def __init__(self, fsm_file_path):
@@ -332,6 +264,84 @@ class InferenceEngine(cognitive_engine.Engine):
 
         self._on_zoom_call = False
 
+    def _result_wrapper_for_transition(self, transition):
+        status = gabriel_pb2.ResultWrapper.Status.SUCCESS
+        result_wrapper = cognitive_engine.create_result_wrapper(status)
+
+        logger.info('sending %s', transition.instruction.audio)
+
+        result = gabriel_pb2.ResultWrapper.Result()
+        result.payload_type = gabriel_pb2.PayloadType.TEXT
+        result.payload = transition.instruction.audio.encode()
+        result_wrapper.results.append(result)
+
+        if len(transition.instruction.image) > 0:
+            result = gabriel_pb2.ResultWrapper.Result()
+            result.payload_type = gabriel_pb2.PayloadType.IMAGE
+            result.payload = transition.instruction.image
+            result_wrapper.results.append(result)
+
+        if len(transition.instruction.video) > 0:
+            result = gabriel_pb2.ResultWrapper.Result()
+            result.payload_type = gabriel_pb2.PayloadType.VIDEO
+            result.payload = transition.instruction.video
+            result_wrapper.results.append(result)
+
+        to_client_extras = owf_pb2.ToClientExtras()
+        to_client_extras.step = transition.next_state
+        to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.NO_CALL
+
+        # Whether to clear the 'thumbs-up' icon or not depends on whether the next
+        # state is 'gated' or not
+        assert transition.next_state != '', "invalid transition end state"
+        next_processors = self._states_models.get_state(transition.next_state).processors
+        if len(next_processors) == 1 and not _thumbs_up_required(next_processors[0]):
+            to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.SET
+        else:
+            to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
+
+        result_wrapper.extras.Pack(to_client_extras)
+        return result_wrapper
+
+    def _result_wrapper_for(self,
+                            step,
+                            zoom_result=owf_pb2.ToClientExtras.ZoomResult.NO_CALL,
+                            audio=None,
+                            user_ready=owf_pb2.ToClientExtras.UserReady.NO_CHANGE):
+        status = gabriel_pb2.ResultWrapper.Status.SUCCESS
+        result_wrapper = cognitive_engine.create_result_wrapper(status)
+        to_client_extras = owf_pb2.ToClientExtras()
+        to_client_extras.step = step
+        to_client_extras.zoom_result = zoom_result
+        to_client_extras.user_ready = user_ready
+
+        if audio is not None:
+            result = gabriel_pb2.ResultWrapper.Result()
+            result.payload_type = gabriel_pb2.PayloadType.TEXT
+            result.payload = audio.encode()
+            result_wrapper.results.append(result)
+
+        result_wrapper.extras.Pack(to_client_extras)
+        return result_wrapper
+
+    def _start_zoom(self):
+        status = gabriel_pb2.ResultWrapper.Status.SUCCESS
+        result_wrapper = cognitive_engine.create_result_wrapper(status)
+        to_client_extras = owf_pb2.ToClientExtras()
+        to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.CALL_START
+        to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
+
+        zoom_info = owf_pb2.ZoomInfo()
+        zoom_info.app_key = credentials.ANDROID_KEY
+        zoom_info.app_secret = credentials.ANDROID_SECRET
+        zoom_info.meeting_number = credentials.MEETING_NUMBER
+        zoom_info.meeting_password = credentials.MEETING_PASSWORD
+
+        to_client_extras.zoom_info.CopyFrom(zoom_info)
+
+        result_wrapper.extras.Pack(to_client_extras)
+        return result_wrapper
+
     def handle(self, input_frame):
         to_server_extras = cognitive_engine.unpack_extras(
             owf_pb2.ToServerExtras, input_frame)
@@ -350,7 +360,7 @@ class InferenceEngine(cognitive_engine.Engine):
             # ###############################################
             self._thumbs_up_found = False
             # ###############################################
-            return _result_wrapper_for_transition(transition)
+            return self._result_wrapper_for_transition(transition)
 
         step = to_server_extras.step
         if step == '':
@@ -358,8 +368,8 @@ class InferenceEngine(cognitive_engine.Engine):
         elif (to_server_extras.zoom_status ==
               owf_pb2.ToServerExtras.ZoomStatus.START):
             if self._on_zoom_call:
-                return _result_wrapper_for(step,
-                                           zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+                return self._result_wrapper_for(step,
+                                                zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
 
             msg = {
                 'zoom_action': 'start',
@@ -370,7 +380,7 @@ class InferenceEngine(cognitive_engine.Engine):
             # ###############################################
             self._thumbs_up_found = False
             # ###############################################
-            return _start_zoom()
+            return self._start_zoom()
         else:
             state = self._states_models.get_state(step)
 
@@ -378,14 +388,15 @@ class InferenceEngine(cognitive_engine.Engine):
             # ###############################################
             self._thumbs_up_found = False
             # ###############################################
-            return _result_wrapper_for_transition(state.always_transition)
+            return self._result_wrapper_for_transition(state.always_transition)
 
         # End state reached
         if len(state.processors) == 0:
-            return _result_wrapper_for(step)
+            return self._result_wrapper_for(step)
 
         assert len(state.processors) == 1, 'wrong number of processors'
         processor = state.processors[0]
+
         callable_args = json.loads(processor.callable_args)
         detector_dir = callable_args[DETECTOR_PATH]
         detector = self._states_models.get_object_detector(detector_dir)
@@ -395,30 +406,30 @@ class InferenceEngine(cognitive_engine.Engine):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         # ############################################### Detecting hand gestures
-
         result = self._hands.process(img)
         if result.multi_hand_landmarks and len(result.multi_hand_landmarks) == 1:
             hand_landmark = result.multi_hand_landmarks[0].landmark
             thumb_state = hg.get_thumb_state(hand_landmark, img.shape)
 
             if thumb_state == 'thumbs up':
-                print('Thumbs up detected.')
-                if not self._thumbs_up_found:
-                    self._thumbs_up_found = True
-                    return _result_wrapper_for(step, audio=thumbs_up_audio,
-                                               user_ready=owf_pb2.ToClientExtras.UserReady.SET)
+                if _thumbs_up_required(processor):
+                    print('Thumbs up detected.')
+                    if not self._thumbs_up_found:
+                        self._thumbs_up_found = True
+                        return self._result_wrapper_for(step, audio=thumbs_up_audio,
+                                                        user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
             elif thumb_state == 'thumbs down':
                 self._thumbs_up_found = False
                 print('Thumbs down detected.')
 
-                # return _result_wrapper_for(step,
+                # return self._result_wrapper_for(step,
                 #                            audio='Thumbs down detected! Calling expert now.')
 
                 # Try to start a Zoom call
                 if self._on_zoom_call:
-                    return _result_wrapper_for(step,
-                                               zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+                    return self._result_wrapper_for(step,
+                                                    zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
                 msg = {
                     'zoom_action': 'start',
                     'step': step
@@ -428,11 +439,11 @@ class InferenceEngine(cognitive_engine.Engine):
                 # ###############################################
                 self._thumbs_up_found = False
                 # ###############################################
-                return _start_zoom()
+                return self._start_zoom()
 
-        if not self._thumbs_up_found:
+        if _thumbs_up_required(processor) and not self._thumbs_up_found:
             # User not ready yet, return without running the two phase object detection
-            return _result_wrapper_for(step)
+            return self._result_wrapper_for(step)
         # ###############################################
 
         # Insert a new axis to make an input tensor of shape (1, h, w, channel)
@@ -466,19 +477,22 @@ class InferenceEngine(cognitive_engine.Engine):
                 box_scores.insert(bi, score)
 
         if not good_boxes:
-            return _result_wrapper_for(step)
+            return self._result_wrapper_for(step)
 
         print()
         print('Detector boxes:', box_scores)
         for best_box in good_boxes:
             ymin, xmin, ymax, xmax = best_box
-            (left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
+            (left, right, top, bottom) = (xmin * im_width, xmax * im_width,
+                                          ymin * im_height, ymax * im_height)
 
-            # ########################### size measurement
+            # ########################### length measurement
             if detector_class_name == 'bolt':
                 (xmin, ymin, xmax, ymax) = (xmin * im_width, ymin * im_height,
                                             xmax * im_width, ymax * im_height)
                 img, re1, size_ob = ms.size_measuring(xmin, ymin, xmax, ymax, img)
+                user_ready_after_error = (owf_pb2.ToClientExtras.UserReady.CLEAR if _thumbs_up_required(processor)
+                                          else owf_pb2.ToClientExtras.UserReady.NO_CHANGE)
 
                 if re1 == -2:
                     # Possibly a false positive detection - detecting the aruco marker as the bolt
@@ -494,9 +508,10 @@ class InferenceEngine(cognitive_engine.Engine):
                     if self.count_ >= self.aruco_patience:
                         self.count_ = 0
                         self._thumbs_up_found = False
-                        return _result_wrapper_for(step,
-                                                   audio=aruco_error_audio,
-                                                   user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
+
+                        return self._result_wrapper_for(step,
+                                                        audio=aruco_error_audio,
+                                                        user_ready=user_ready_after_error)
                 else:
                     # from cm to mm
                     size_ob = round(size_ob * 10, 0)
@@ -513,9 +528,9 @@ class InferenceEngine(cognitive_engine.Engine):
                         if self.error_count >= self.error_patience:
                             self.error_count = 0
                             self._thumbs_up_found = False
-                            return _result_wrapper_for(step,
-                                                       audio=length_error_audio,
-                                                       user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
+                            return self._result_wrapper_for(step,
+                                                            audio=length_error_audio,
+                                                            user_ready=user_ready_after_error)
             # ###########################
 
             else:
@@ -541,13 +556,13 @@ class InferenceEngine(cognitive_engine.Engine):
                     # ###############################################
                     self._thumbs_up_found = False
                     # ###############################################
-                    return _result_wrapper_for_transition(transition)
-            return _result_wrapper_for(step)
+                    return self._result_wrapper_for_transition(transition)
+            return self._result_wrapper_for(step)
 
         # Good boxes do not contain any valid steps
         self.count_ = 0
         self.error_count = 0
-        return _result_wrapper_for(step)
+        return self._result_wrapper_for(step)
 
 
 def main():
