@@ -63,6 +63,12 @@ _Detector = namedtuple('_Detector', ['detector', 'category_index'])
 
 mp_hands = mp.solutions.hands
 
+thumbs_up_audio = 'Thumbs up detected!' if DEBUG_AUDIO else None
+aruco_error_audio = 'Please place the bolt near the aruco marker, and make sure ' \
+                    'the marker is fully shown.'
+length_error_audio = 'This seems to be a bolt with the incorrect length. ' \
+                     'Please put it away and find a 12 millimeter bolt again.'
+
 
 def _result_wrapper_for_transition(transition):
     status = gabriel_pb2.ResultWrapper.Status.SUCCESS
@@ -174,8 +180,7 @@ class _StatesModels:
                     always_transition = transition
                     break
 
-                assert predicate.callable_name == HAS_OBJECT_CLASS, (
-                    'bad callable')
+                assert predicate.callable_name == HAS_OBJECT_CLASS, 'bad callable'
                 callable_args = json.loads(predicate.callable_args)
                 class_name = callable_args[CLASS_NAME]
 
@@ -189,8 +194,7 @@ class _StatesModels:
         self._start_state = self._states[pb_fsm.start_state]
 
     def _load_models(self, processor):
-        assert processor.callable_name == TWO_STAGE_PROCESSOR or processor.callable_name == DUMMY_PROCESSOR,\
-            'bad processor'
+        assert processor.callable_name in [TWO_STAGE_PROCESSOR, DUMMY_PROCESSOR], 'bad processor'
         callable_args = json.loads(processor.callable_args)
 
         if processor.callable_name == TWO_STAGE_PROCESSOR:
@@ -391,6 +395,7 @@ class InferenceEngine(cognitive_engine.Engine):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         # ############################################### Detecting hand gestures
+
         result = self._hands.process(img)
         if result.multi_hand_landmarks and len(result.multi_hand_landmarks) == 1:
             hand_landmark = result.multi_hand_landmarks[0].landmark
@@ -400,7 +405,6 @@ class InferenceEngine(cognitive_engine.Engine):
                 print('Thumbs up detected.')
                 if not self._thumbs_up_found:
                     self._thumbs_up_found = True
-                    thumbs_up_audio = 'Thumbs up detected!' if DEBUG_AUDIO else None
                     return _result_wrapper_for(step, audio=thumbs_up_audio,
                                                user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
@@ -491,8 +495,7 @@ class InferenceEngine(cognitive_engine.Engine):
                         self.count_ = 0
                         self._thumbs_up_found = False
                         return _result_wrapper_for(step,
-                                                   audio='Please place the bolt near the aruco marker, and make sure '
-                                                   'the marker is fully shown.',
+                                                   audio=aruco_error_audio,
                                                    user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
                 else:
                     # from cm to mm
@@ -511,8 +514,7 @@ class InferenceEngine(cognitive_engine.Engine):
                             self.error_count = 0
                             self._thumbs_up_found = False
                             return _result_wrapper_for(step,
-                                                       audio='This seems to be a bolt with the incorrect length. '
-                                                       'Please put it away and find a 12 millimeter bolt again.',
+                                                       audio=length_error_audio,
                                                        user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
             # ###########################
 
