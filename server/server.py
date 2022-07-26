@@ -31,7 +31,7 @@ import wca_state_machine_pb2
 import measure_object_size as ms
 import hand_gestures as hg
 
-DEBUG_AUDIO = True
+DEBUG_AUDIO = False
 
 SOURCE = 'owf_client'
 INPUT_QUEUE_MAXSIZE = 60
@@ -231,6 +231,7 @@ class InferenceEngine(cognitive_engine.Engine):
         self.aruco_patience = 3
         self.error_patience = 2
         self._thumbs_up_found = False
+        self._thumbs_down_found = False
         # ############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -342,6 +343,24 @@ class InferenceEngine(cognitive_engine.Engine):
         result_wrapper.extras.Pack(to_client_extras)
         return result_wrapper
 
+    def _try_start_zoom(self, step):
+        if self._on_zoom_call:
+            # ###############################################
+            self._thumbs_down_found = False
+            # ###############################################
+            return self._result_wrapper_for(step,
+                                            zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
+        msg = {
+            'zoom_action': 'start',
+            'step': step
+        }
+        self._engine_conn.send(msg)
+        logger.info('Zoom Started')
+        # ###############################################
+        self._thumbs_up_found = False
+        # ###############################################
+        return self._start_zoom()
+
     def handle(self, input_frame):
         to_server_extras = cognitive_engine.unpack_extras(
             owf_pb2.ToServerExtras, input_frame)
@@ -359,6 +378,7 @@ class InferenceEngine(cognitive_engine.Engine):
             transition = self._states_for_expert_call.get_transition(new_step)
             # ###############################################
             self._thumbs_up_found = False
+            self._thumbs_down_found = False
             # ###############################################
             return self._result_wrapper_for_transition(transition)
 
@@ -367,20 +387,7 @@ class InferenceEngine(cognitive_engine.Engine):
             state = self._states_models.get_start_state()
         elif (to_server_extras.zoom_status ==
               owf_pb2.ToServerExtras.ZoomStatus.START):
-            if self._on_zoom_call:
-                return self._result_wrapper_for(step,
-                                                zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
-
-            msg = {
-                'zoom_action': 'start',
-                'step': step
-            }
-            self._engine_conn.send(msg)
-            logger.info('Zoom Started')
-            # ###############################################
-            self._thumbs_up_found = False
-            # ###############################################
-            return self._start_zoom()
+            return self._try_start_zoom(step)
         else:
             state = self._states_models.get_state(step)
 
@@ -420,26 +427,15 @@ class InferenceEngine(cognitive_engine.Engine):
                                                         user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
             elif thumb_state == 'thumbs down':
-                self._thumbs_up_found = False
+
                 print('Thumbs down detected.')
+                if not self._thumbs_down_found:
+                    self._thumbs_down_found = True
 
-                # return self._result_wrapper_for(step,
-                #                            audio='Thumbs down detected! Calling expert now.')
-
-                # Try to start a Zoom call
-                if self._on_zoom_call:
-                    return self._result_wrapper_for(step,
-                                                    zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
-                msg = {
-                    'zoom_action': 'start',
-                    'step': step
-                }
-                self._engine_conn.send(msg)
-                logger.info('Zoom Started')
-                # ###############################################
-                self._thumbs_up_found = False
-                # ###############################################
-                return self._start_zoom()
+                    # Try to start a Zoom call
+                    return self._try_start_zoom(step)
+                    # return self._result_wrapper_for(step,
+                    #                                 audio='Thumbs down detected! Calling expert now.')
 
         if _thumbs_up_required(processor) and not self._thumbs_up_found:
             # User not ready yet, return without running the two phase object detection
