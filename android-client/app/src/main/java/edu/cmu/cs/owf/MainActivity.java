@@ -5,6 +5,7 @@ import androidx.activity.result.ActivityResultCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -17,6 +18,7 @@ import android.content.res.AssetManager;
 import android.graphics.drawable.Drawable;
 import android.media.MediaPlayer;
 import android.os.Bundle;
+import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.View;
@@ -31,6 +33,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
@@ -62,6 +65,12 @@ public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_APP_SECRET = "edu.cmu.cs.owf.APP_SECRET";
     public static final String EXTRA_MEETING_NUMBER = "edu.cmu.cs.owf.MEETING_NUMBER";
     public static final String EXTRA_MEETING_PASSWORD = "edu.cmu.cs.owf.MEETING_PASSWORD";
+
+    private static final int REQUEST_CODE = 999;
+    private static final String CALL_EXPERT = "CALL EXPERT";
+    private static final String REPORT = "REPORT";
+    private boolean requestZoom = false;
+    private boolean prepareZoom = false;
 
     private String step;
 
@@ -130,6 +139,10 @@ public class MainActivity extends AppCompatActivity {
 
         } catch (InvalidProtocolBufferException e) {
             Log.e(TAG, "Protobuf parse error", e);
+        }
+
+        if (requestZoom) {
+            prepareZoom = true;
         }
 
         if (resultWrapper.getResultsCount() == 0) {
@@ -250,20 +263,35 @@ public class MainActivity extends AppCompatActivity {
     final private ImageAnalysis.Analyzer analyzer = new ImageAnalysis.Analyzer() {
         @Override
         public void analyze(@NonNull ImageProxy image) {
-            serverComm.sendSupplier(() -> {
-                ByteString jpegByteString = yuvToJPEGConverter.convert(image);
+            if (MainActivity.this.prepareZoom) {
+                MainActivity.this.requestZoom = false;
+                MainActivity.this.prepareZoom = false;
+                serverComm.sendSupplier(() -> {
+                    ToServerExtras toServerExtras = ToServerExtras.newBuilder()
+                            .setStep(MainActivity.this.step)
+                            .setZoomStatus(ToServerExtras.ZoomStatus.START)
+                            .build();
 
-                ToServerExtras toServerExtras = ToServerExtras.newBuilder()
-                        .setStep(MainActivity.this.step)
-                        .setZoomStatus(ToServerExtras.ZoomStatus.NO_CALL)
-                        .build();
+                    return InputFrame.newBuilder()
+                            .setExtras(pack(toServerExtras))
+                            .build();
+                }, SOURCE, /* wait */ true);
+            } else {
+                serverComm.sendSupplier(() -> {
+                    ByteString jpegByteString = yuvToJPEGConverter.convert(image);
 
-                return InputFrame.newBuilder()
-                        .setPayloadType(PayloadType.IMAGE)
-                        .addPayloads(jpegByteString)
-                        .setExtras(pack(toServerExtras))
-                        .build();
-            }, SOURCE, /* wait */ false);
+                    ToServerExtras toServerExtras = ToServerExtras.newBuilder()
+                            .setStep(MainActivity.this.step)
+                            .setZoomStatus(ToServerExtras.ZoomStatus.NO_CALL)
+                            .build();
+
+                    return InputFrame.newBuilder()
+                            .setPayloadType(PayloadType.IMAGE)
+                            .addPayloads(jpegByteString)
+                            .setExtras(pack(toServerExtras))
+                            .build();
+                }, SOURCE, /* wait */ false);
+            }
 
             // The image has either been sent or skipped. It is therefore safe to close the image.
             image.close();
@@ -274,17 +302,37 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         cameraCapture.shutdown();
+        // TODO: Clean up the Zoom session?
     }
 
-    public void startZoom(View view) {
-        ToServerExtras toServerExtras = ToServerExtras.newBuilder()
-                .setStep(step)
-                .setZoomStatus(ToServerExtras.ZoomStatus.START)
-                .build();
+    public void startVoiceRecognition(View view) {
+        final Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        startActivityForResult(intent, REQUEST_CODE);
+    }
 
-        serverComm.send(
-                InputFrame.newBuilder().setExtras(pack(toServerExtras)).build(),
-                SOURCE,
-                /* wait */ true);
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (resultCode == RESULT_OK) {
+            final List<String> results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            Log.d(TAG, "ASR results: " + results.toString());
+            if (results.size() > 0 && !results.get(0).isEmpty()) {
+                String spokenText = results.get(0);
+                // TODO: Use more keywords for starting Zoom or sending error report
+                if (spokenText.toUpperCase().contains(CALL_EXPERT)) {
+                    this.textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, null);
+                    this.requestZoom = true;
+                } else if (spokenText.toUpperCase().contains(REPORT)) {
+                    // TODO: Send error report
+                    final String feedback = "An error log has been recorded. We appreciate your feedback.";
+                    this.textToSpeech.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null);
+                }
+            }
+        } else {
+            Log.d(TAG, "ASR Result not OK");
+        }
     }
 }

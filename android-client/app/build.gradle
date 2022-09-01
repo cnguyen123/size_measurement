@@ -15,7 +15,7 @@ android {
     buildToolsVersion "29.0.3"
 
     defaultConfig {
-        applicationId "edu.cmu.cs.owf"
+        applicationId 'edu.cmu.cs.owf_asr'
         minSdkVersion 24
         targetSdkVersion 29
         versionCode 1
