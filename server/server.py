@@ -432,8 +432,8 @@ class InferenceEngine(cognitive_engine.Engine):
         detector = self._states_models.get_object_detector(detector_dir)
 
         np_data = np.frombuffer(input_frame.payloads[0], dtype=np.uint8)
-        img = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_bgr = cv2.imdecode(np_data, cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         # ############################################### Detecting hand gestures
         result = self._hands.process(img)
@@ -507,7 +507,7 @@ class InferenceEngine(cognitive_engine.Engine):
         cached_filename = os.path.join(DEFAULT_CACHE_DIR,
                                        cur_time + detected_class + '(' + detector_class_name + ').jpg')
         self._frames_cached.append(cached_filename)
-        cv2.imwrite(cached_filename, img)
+        cv2.imwrite(cached_filename, img_bgr)
 
         if not good_boxes:
             return self._result_wrapper_for(step)
