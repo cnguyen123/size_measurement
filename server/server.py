@@ -297,7 +297,7 @@ class InferenceEngine(cognitive_engine.Engine):
         assert transition.next_state != '', "invalid transition end state"
         next_processors = self._states_models.get_state(transition.next_state).processors
         if len(next_processors) == 1 and not _thumbs_up_required(next_processors[0]):
-            to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.SET
+            to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.DISABLE
         else:
             to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
 
@@ -330,7 +330,7 @@ class InferenceEngine(cognitive_engine.Engine):
         result_wrapper = cognitive_engine.create_result_wrapper(status)
         to_client_extras = owf_pb2.ToClientExtras()
         to_client_extras.zoom_result = owf_pb2.ToClientExtras.ZoomResult.CALL_START
-        to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.CLEAR
+        to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.NO_CHANGE
 
         zoom_info = owf_pb2.ZoomInfo()
         zoom_info.app_key = credentials.ANDROID_KEY
@@ -488,7 +488,7 @@ class InferenceEngine(cognitive_engine.Engine):
                                             xmax * im_width, ymax * im_height)
                 img, re1, size_ob = ms.size_measuring(xmin, ymin, xmax, ymax, img)
                 user_ready_after_error = (owf_pb2.ToClientExtras.UserReady.CLEAR if _thumbs_up_required(processor)
-                                          else owf_pb2.ToClientExtras.UserReady.NO_CHANGE)
+                                          else owf_pb2.ToClientExtras.UserReady.DISABLE)
 
                 if re1 == -2:
                     # Possibly a false positive detection - detecting the aruco marker as the bolt

@@ -29,6 +29,7 @@ message ToClientExtras {
         NO_CHANGE = 0;
         SET = 1;
         CLEAR = 2;
+        DISABLE = 3;
     }
     UserReady user_ready = 4;
 }

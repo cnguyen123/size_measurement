@@ -23,6 +23,7 @@ import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.VideoView;
 
 import com.google.protobuf.Any;
@@ -82,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageViewUpdater instructionViewUpdater;
     private ImageView instructionImage;
     private ImageView readyView;
+    private TextView readyTextView;
     private VideoView instructionVideo;
     private File videoFile;
 
@@ -130,10 +132,17 @@ public class MainActivity extends AppCompatActivity {
             if (toClientExtras.getUserReady() == ToClientExtras.UserReady.SET) {
                 runOnUiThread(() -> {
                     readyView.setVisibility(View.VISIBLE);
+                    readyTextView.setVisibility(View.VISIBLE);
                 });
             } else if (toClientExtras.getUserReady() == ToClientExtras.UserReady.CLEAR) {
                 runOnUiThread(() -> {
                     readyView.setVisibility(View.INVISIBLE);
+                    readyTextView.setVisibility(View.VISIBLE);
+                });
+            } else if (toClientExtras.getUserReady() == ToClientExtras.UserReady.DISABLE) {
+                runOnUiThread(() -> {
+                    readyView.setVisibility(View.INVISIBLE);
+                    readyTextView.setVisibility(View.INVISIBLE);
                 });
             }
 
@@ -204,6 +213,7 @@ public class MainActivity extends AppCompatActivity {
         PreviewView viewFinder = findViewById(R.id.viewFinder);
 
         readyView = findViewById(R.id.readyView);
+        readyTextView = findViewById(R.id.readyTextView);
         AssetManager assetManager = getAssets();
         try
         {
