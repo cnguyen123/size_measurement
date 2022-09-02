@@ -4,6 +4,8 @@ import json
 import logging
 import io
 import os
+import shutil
+from datetime import datetime
 from collections import namedtuple
 from multiprocessing import Process, Pipe
 
@@ -39,6 +41,10 @@ PORT = 9099
 NUM_TOKENS = 1
 DETECTOR_ONES_SIZE = (1, 480, 640, 3)
 CLASSIFIER_THRESHOLD = 0.9
+
+MAX_FRAMES_CACHED = 1000
+CACHE_BASEDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+DEFAULT_CACHE_DIR = os.path.join(CACHE_BASEDIR, 'last_run')
 
 ALWAYS = 'Always'
 HAS_OBJECT_CLASS = 'HasObjectClass'
@@ -243,6 +249,7 @@ class InferenceEngine(cognitive_engine.Engine):
             transforms.ToTensor(),
             normalize,
         ])
+        self._fsm_file_name = os.path.basename(fsm_file_path)
         self._states_models = _StatesModels(fsm_file_path)
 
         # Reference: https://google.github.io/mediapipe/solutions/hands.html
@@ -264,6 +271,14 @@ class InferenceEngine(cognitive_engine.Engine):
         self._http_server_process.start()
 
         self._on_zoom_call = False
+
+        self._frames_cached = []
+        if os.path.exists(DEFAULT_CACHE_DIR):
+            if os.path.isdir(DEFAULT_CACHE_DIR):
+                shutil.rmtree(DEFAULT_CACHE_DIR)
+            else:
+                os.remove(DEFAULT_CACHE_DIR)
+        os.makedirs(DEFAULT_CACHE_DIR, exist_ok=True)
 
     def _result_wrapper_for_transition(self, transition):
         status = gabriel_pb2.ResultWrapper.Status.SUCCESS
@@ -391,6 +406,14 @@ class InferenceEngine(cognitive_engine.Engine):
         else:
             state = self._states_models.get_state(step)
 
+        # Save current cache folder and create a new cache folder
+        if (to_server_extras.client_cmd ==
+                owf_pb2.ToServerExtras.ClientCmd.REPORT):
+            report_time = datetime.now().strftime('-%Y-%m-%d-%H-%M-%S-%f')
+            log_dirname = self._fsm_file_name.split('.')[0] + report_time
+            os.rename(DEFAULT_CACHE_DIR, os.path.join(CACHE_BASEDIR, log_dirname))
+            os.makedirs(DEFAULT_CACHE_DIR, exist_ok=True)
+
         if state.always_transition is not None:
             # ###############################################
             self._thumbs_up_found = False
@@ -472,6 +495,20 @@ class InferenceEngine(cognitive_engine.Engine):
                 good_boxes.insert(bi, box)
                 box_scores.insert(bi, score)
 
+        # Cache the current frame
+        if len(self._frames_cached) >= MAX_FRAMES_CACHED:
+            frame_to_evict = self._frames_cached.pop(0)
+            try:
+                os.remove(frame_to_evict)
+            except OSError as oe:
+                logger.warning(oe)
+        cur_time = datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f-')
+        detected_class = detector_class_name if good_boxes else 'none'
+        cached_filename = os.path.join(DEFAULT_CACHE_DIR,
+                                       cur_time + detected_class + '(' + detector_class_name + ').jpg')
+        self._frames_cached.append(cached_filename)
+        cv2.imwrite(cached_filename, img)
+
         if not good_boxes:
             return self._result_wrapper_for(step)
 
@@ -541,6 +578,19 @@ class InferenceEngine(cognitive_engine.Engine):
                     continue
                 class_ind = pred.item()
                 label_name = classifier.labels[class_ind]
+
+                # Cache the cropped frame
+                if len(self._frames_cached) >= MAX_FRAMES_CACHED:
+                    frame_to_evict = self._frames_cached.pop(0)
+                    try:
+                        os.remove(frame_to_evict)
+                    except OSError as oe:
+                        logger.warning(oe)
+                classified_class = label_name
+                cached_filename = os.path.join(DEFAULT_CACHE_DIR,
+                                               cur_time + "cropped-" + classified_class + '.jpg')
+                self._frames_cached.append(cached_filename)
+                cropped_pil.save(cached_filename)
 
             logger.info('Found label: %s', label_name)
             # logger.info('return transition: %s', str(state.has_class_transitions.keys()))
