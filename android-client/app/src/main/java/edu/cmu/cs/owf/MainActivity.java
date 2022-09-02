@@ -69,8 +69,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE = 999;
     private static final String CALL_EXPERT = "CALL EXPERT";
     private static final String REPORT = "REPORT";
-    private boolean requestZoom = false;
-    private boolean prepareZoom = false;
+    private ToServerExtras.ClientCmd reqCommand = ToServerExtras.ClientCmd.NO_CMD;
+    private ToServerExtras.ClientCmd prepCommand = ToServerExtras.ClientCmd.NO_CMD;
 
     private String step;
 
@@ -91,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onActivityResult(ActivityResult result) {
                     ToServerExtras toServerExtras = ToServerExtras.newBuilder()
-                            .setZoomStatus(ToServerExtras.ZoomStatus.STOP)
+                            .setClientCmd(ToServerExtras.ClientCmd.ZOOM_STOP)
                             .build();
 
                     serverComm.send(
@@ -141,8 +141,9 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Protobuf parse error", e);
         }
 
-        if (requestZoom) {
-            prepareZoom = true;
+        if (reqCommand != ToServerExtras.ClientCmd.NO_CMD) {
+            prepCommand = reqCommand;
+            reqCommand = ToServerExtras.ClientCmd.NO_CMD;
         }
 
         if (resultWrapper.getResultsCount() == 0) {
@@ -263,35 +264,23 @@ public class MainActivity extends AppCompatActivity {
     final private ImageAnalysis.Analyzer analyzer = new ImageAnalysis.Analyzer() {
         @Override
         public void analyze(@NonNull ImageProxy image) {
-            if (MainActivity.this.prepareZoom) {
-                MainActivity.this.requestZoom = false;
-                MainActivity.this.prepareZoom = false;
-                serverComm.sendSupplier(() -> {
-                    ToServerExtras toServerExtras = ToServerExtras.newBuilder()
-                            .setStep(MainActivity.this.step)
-                            .setZoomStatus(ToServerExtras.ZoomStatus.START)
-                            .build();
+            boolean toWait = (prepCommand != ToServerExtras.ClientCmd.NO_CMD);
+            ToServerExtras.ClientCmd clientCmd = prepCommand;
+            prepCommand = ToServerExtras.ClientCmd.NO_CMD;
+            serverComm.sendSupplier(() -> {
+                ByteString jpegByteString = yuvToJPEGConverter.convert(image);
 
-                    return InputFrame.newBuilder()
-                            .setExtras(pack(toServerExtras))
-                            .build();
-                }, SOURCE, /* wait */ true);
-            } else {
-                serverComm.sendSupplier(() -> {
-                    ByteString jpegByteString = yuvToJPEGConverter.convert(image);
+                ToServerExtras toServerExtras = ToServerExtras.newBuilder()
+                        .setStep(MainActivity.this.step)
+                        .setClientCmd(clientCmd)
+                        .build();
 
-                    ToServerExtras toServerExtras = ToServerExtras.newBuilder()
-                            .setStep(MainActivity.this.step)
-                            .setZoomStatus(ToServerExtras.ZoomStatus.NO_CALL)
-                            .build();
-
-                    return InputFrame.newBuilder()
-                            .setPayloadType(PayloadType.IMAGE)
-                            .addPayloads(jpegByteString)
-                            .setExtras(pack(toServerExtras))
-                            .build();
-                }, SOURCE, /* wait */ false);
-            }
+                return InputFrame.newBuilder()
+                        .setPayloadType(PayloadType.IMAGE)
+                        .addPayloads(jpegByteString)
+                        .setExtras(pack(toServerExtras))
+                        .build();
+            }, SOURCE, /* wait */ toWait);
 
             // The image has either been sent or skipped. It is therefore safe to close the image.
             image.close();
@@ -323,10 +312,13 @@ public class MainActivity extends AppCompatActivity {
                 String spokenText = results.get(0);
                 // TODO: Use more keywords for starting Zoom or sending error report
                 if (spokenText.toUpperCase().contains(CALL_EXPERT)) {
-                    this.textToSpeech.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, null);
-                    this.requestZoom = true;
+                    this.textToSpeech.speak("Calling expert now.",
+                            TextToSpeech.QUEUE_FLUSH, null, null);
+                    this.reqCommand = ToServerExtras.ClientCmd.ZOOM_START;
                 } else if (spokenText.toUpperCase().contains(REPORT)) {
+                    this.reqCommand = ToServerExtras.ClientCmd.REPORT;
                     // TODO: Send error report
+                    //  Let the server return this feedback message audio
                     final String feedback = "An error log has been recorded. We appreciate your feedback.";
                     this.textToSpeech.speak(feedback, TextToSpeech.QUEUE_FLUSH, null, null);
                 }

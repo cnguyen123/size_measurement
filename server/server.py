@@ -366,8 +366,8 @@ class InferenceEngine(cognitive_engine.Engine):
             owf_pb2.ToServerExtras, input_frame)
         print('.', end='')
 
-        if (to_server_extras.zoom_status ==
-                owf_pb2.ToServerExtras.ZoomStatus.STOP):
+        if (to_server_extras.client_cmd ==
+                owf_pb2.ToServerExtras.ClientCmd.ZOOM_STOP):
             msg = {
                 'zoom_action': 'stop'
             }
@@ -385,8 +385,8 @@ class InferenceEngine(cognitive_engine.Engine):
         step = to_server_extras.step
         if step == '':
             state = self._states_models.get_start_state()
-        elif (to_server_extras.zoom_status ==
-              owf_pb2.ToServerExtras.ZoomStatus.START):
+        elif (to_server_extras.client_cmd ==
+              owf_pb2.ToServerExtras.ClientCmd.ZOOM_START):
             return self._try_start_zoom(step)
         else:
             state = self._states_models.get_state(step)

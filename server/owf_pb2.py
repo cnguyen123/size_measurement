@@ -20,36 +20,40 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='owf',
   syntax='proto3',
   serialized_options=_b('\n\016edu.cmu.cs.owfB\006Protos'),
-  serialized_pb=_b('\n\towf.proto\x12\x03owf\"\x83\x01\n\x0eToServerExtras\x12\x0c\n\x04step\x18\x01 \x01(\t\x12\x33\n\x0bzoom_status\x18\x02 \x01(\x0e\x32\x1e.owf.ToServerExtras.ZoomStatus\".\n\nZoomStatus\x12\x0b\n\x07NO_CALL\x10\x00\x12\t\n\x05START\x10\x01\x12\x08\n\x04STOP\x10\x02\"\x94\x02\n\x0eToClientExtras\x12\x0c\n\x04step\x18\x01 \x01(\t\x12 \n\tzoom_info\x18\x02 \x01(\x0b\x32\r.owf.ZoomInfo\x12\x33\n\x0bzoom_result\x18\x03 \x01(\x0e\x32\x1e.owf.ToClientExtras.ZoomResult\x12\x31\n\nuser_ready\x18\x04 \x01(\x0e\x32\x1d.owf.ToClientExtras.UserReady\":\n\nZoomResult\x12\x0b\n\x07NO_CALL\x10\x00\x12\x0e\n\nCALL_START\x10\x01\x12\x0f\n\x0b\x45XPERT_BUSY\x10\x02\".\n\tUserReady\x12\r\n\tNO_CHANGE\x10\x00\x12\x07\n\x03SET\x10\x01\x12\t\n\x05\x43LEAR\x10\x02\"a\n\x08ZoomInfo\x12\x0f\n\x07\x61pp_key\x18\x01 \x01(\t\x12\x12\n\napp_secret\x18\x02 \x01(\t\x12\x16\n\x0emeeting_number\x18\x03 \x01(\t\x12\x18\n\x10meeting_password\x18\x04 \x01(\tB\x18\n\x0e\x65\x64u.cmu.cs.owfB\x06Protosb\x06proto3')
+  serialized_pb=_b('\n\towf.proto\x12\x03owf\"\x95\x01\n\x0eToServerExtras\x12\x0c\n\x04step\x18\x01 \x01(\t\x12\x31\n\nclient_cmd\x18\x02 \x01(\x0e\x32\x1d.owf.ToServerExtras.ClientCmd\"B\n\tClientCmd\x12\n\n\x06NO_CMD\x10\x00\x12\x0e\n\nZOOM_START\x10\x01\x12\r\n\tZOOM_STOP\x10\x02\x12\n\n\x06REPORT\x10\x03\"\x94\x02\n\x0eToClientExtras\x12\x0c\n\x04step\x18\x01 \x01(\t\x12 \n\tzoom_info\x18\x02 \x01(\x0b\x32\r.owf.ZoomInfo\x12\x33\n\x0bzoom_result\x18\x03 \x01(\x0e\x32\x1e.owf.ToClientExtras.ZoomResult\x12\x31\n\nuser_ready\x18\x04 \x01(\x0e\x32\x1d.owf.ToClientExtras.UserReady\":\n\nZoomResult\x12\x0b\n\x07NO_CALL\x10\x00\x12\x0e\n\nCALL_START\x10\x01\x12\x0f\n\x0b\x45XPERT_BUSY\x10\x02\".\n\tUserReady\x12\r\n\tNO_CHANGE\x10\x00\x12\x07\n\x03SET\x10\x01\x12\t\n\x05\x43LEAR\x10\x02\"a\n\x08ZoomInfo\x12\x0f\n\x07\x61pp_key\x18\x01 \x01(\t\x12\x12\n\napp_secret\x18\x02 \x01(\t\x12\x16\n\x0emeeting_number\x18\x03 \x01(\t\x12\x18\n\x10meeting_password\x18\x04 \x01(\tB\x18\n\x0e\x65\x64u.cmu.cs.owfB\x06Protosb\x06proto3')
 )
 
 
 
-_TOSERVEREXTRAS_ZOOMSTATUS = _descriptor.EnumDescriptor(
-  name='ZoomStatus',
-  full_name='owf.ToServerExtras.ZoomStatus',
+_TOSERVEREXTRAS_CLIENTCMD = _descriptor.EnumDescriptor(
+  name='ClientCmd',
+  full_name='owf.ToServerExtras.ClientCmd',
   filename=None,
   file=DESCRIPTOR,
   values=[
     _descriptor.EnumValueDescriptor(
-      name='NO_CALL', index=0, number=0,
+      name='NO_CMD', index=0, number=0,
       serialized_options=None,
       type=None),
     _descriptor.EnumValueDescriptor(
-      name='START', index=1, number=1,
+      name='ZOOM_START', index=1, number=1,
       serialized_options=None,
       type=None),
     _descriptor.EnumValueDescriptor(
-      name='STOP', index=2, number=2,
+      name='ZOOM_STOP', index=2, number=2,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='REPORT', index=3, number=3,
       serialized_options=None,
       type=None),
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=104,
-  serialized_end=150,
+  serialized_start=102,
+  serialized_end=168,
 )
-_sym_db.RegisterEnumDescriptor(_TOSERVEREXTRAS_ZOOMSTATUS)
+_sym_db.RegisterEnumDescriptor(_TOSERVEREXTRAS_CLIENTCMD)
 
 _TOCLIENTEXTRAS_ZOOMRESULT = _descriptor.EnumDescriptor(
   name='ZoomResult',
@@ -72,8 +76,8 @@ _TOCLIENTEXTRAS_ZOOMRESULT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=323,
-  serialized_end=381,
+  serialized_start=341,
+  serialized_end=399,
 )
 _sym_db.RegisterEnumDescriptor(_TOCLIENTEXTRAS_ZOOMRESULT)
 
@@ -98,8 +102,8 @@ _TOCLIENTEXTRAS_USERREADY = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=383,
-  serialized_end=429,
+  serialized_start=401,
+  serialized_end=447,
 )
 _sym_db.RegisterEnumDescriptor(_TOCLIENTEXTRAS_USERREADY)
 
@@ -119,7 +123,7 @@ _TOSERVEREXTRAS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='zoom_status', full_name='owf.ToServerExtras.zoom_status', index=1,
+      name='client_cmd', full_name='owf.ToServerExtras.client_cmd', index=1,
       number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -130,7 +134,7 @@ _TOSERVEREXTRAS = _descriptor.Descriptor(
   ],
   nested_types=[],
   enum_types=[
-    _TOSERVEREXTRAS_ZOOMSTATUS,
+    _TOSERVEREXTRAS_CLIENTCMD,
   ],
   serialized_options=None,
   is_extendable=False,
@@ -139,7 +143,7 @@ _TOSERVEREXTRAS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=19,
-  serialized_end=150,
+  serialized_end=168,
 )
 
 
@@ -192,8 +196,8 @@ _TOCLIENTEXTRAS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=153,
-  serialized_end=429,
+  serialized_start=171,
+  serialized_end=447,
 )
 
 
@@ -244,12 +248,12 @@ _ZOOMINFO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=431,
-  serialized_end=528,
+  serialized_start=449,
+  serialized_end=546,
 )
 
-_TOSERVEREXTRAS.fields_by_name['zoom_status'].enum_type = _TOSERVEREXTRAS_ZOOMSTATUS
-_TOSERVEREXTRAS_ZOOMSTATUS.containing_type = _TOSERVEREXTRAS
+_TOSERVEREXTRAS.fields_by_name['client_cmd'].enum_type = _TOSERVEREXTRAS_CLIENTCMD
+_TOSERVEREXTRAS_CLIENTCMD.containing_type = _TOSERVEREXTRAS
 _TOCLIENTEXTRAS.fields_by_name['zoom_info'].message_type = _ZOOMINFO
 _TOCLIENTEXTRAS.fields_by_name['zoom_result'].enum_type = _TOCLIENTEXTRAS_ZOOMRESULT
 _TOCLIENTEXTRAS.fields_by_name['user_ready'].enum_type = _TOCLIENTEXTRAS_USERREADY
