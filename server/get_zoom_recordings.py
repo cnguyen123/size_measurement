@@ -16,7 +16,7 @@ last_month = date.today() - timedelta(days=30)
 payload = {'access_token': credentials.JWT_TOKEN, 'from': last_month, 'to': today}
 
 
-if __name__ == "__main__":
+def main():
     response = requests.get(list_recordings_url, params=payload)
     meetings_list = []
     try:
@@ -49,3 +49,7 @@ if __name__ == "__main__":
                     for chunk in r.iter_content(CHUNK_SIZE):
                         fi.write(chunk)
                 print("Done")
+
+
+if __name__ == "__main__":
+    main()

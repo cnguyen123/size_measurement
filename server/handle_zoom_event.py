@@ -1,5 +1,7 @@
 import json
 import requests
+import hmac
+import hashlib
 import credentials
 import logging
 
@@ -13,20 +15,28 @@ in_meeting_control_api = "/live_meetings/" + credentials.MEETING_NUMBER + "/even
 in_meeting_control_url = API_SERVER + in_meeting_control_api + ACCESS_TOKEN_SUFFIX
 payload = {'method': "recording.start"}
 
+gabriel_user_list = []
+
 
 # Referring to https://marketplace.zoom.us/docs/api-reference/webhook-reference/#verify-webhook-events
-def verify(headers, obj):
-    return True
+def verify(headers, body):
+    msg = ":".join(["v0", headers.get('x-zm-request-timestamp'), body])
+    signature = hmac.new(bytes(credentials.SECRET_TOKEN, 'utf-8'), msg=bytes(msg, 'utf-8'),
+                         digestmod=hashlib.sha256).hexdigest()
+    return "v0=" + signature == headers.get('x-zm-signature')
 
 
 def handle(headers, body):
     logger.info("Request received from Zoom webhook")
-    logger.info(str(headers['x-zm-request-timestamp']))
-    logger.info(str(headers['x-zm-signature']))
-    obj = json.loads(body.decode('UTF8'))
-    logger.info(str(obj))
-    if verify(headers, obj):
-        pass
+    body_text = body.decode('utf-8')
+    if verify(headers, body_text):
+        content = json.loads(body_text)
+        if (content.get('event') == "meeting.participant_joined" and
+                content.get('payload').get('object').get('participant').get('user_name') == ZOOM_CLIENT_USER_NAME):
+            gabriel_user_list.append(content.get('payload').get('object').get('participant').get('user_id'))
+            print(gabriel_user_list)
+        else:
+            pass
 
 
 if __name__ == "__main__":
