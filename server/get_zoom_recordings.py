@@ -3,7 +3,9 @@ import json
 import requests
 import credentials
 from datetime import date, timedelta
+import logging
 
+logger = logging.getLogger(__name__)
 
 API_SERVER = "https://api.zoom.us/v2"
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recordings')
@@ -18,17 +20,17 @@ payload = {'access_token': credentials.JWT_TOKEN, 'from': last_month, 'to': toda
 
 def main():
     response = requests.get(list_recordings_url, params=payload)
-    meetings_list = []
     try:
         recordings_list = response.json()
         if recordings_list.get('code') is not None:
-            print(recordings_list)
-            exit(1)
-        meetings_list = recordings_list.get('meetings')
-    except json.decoder.JSONDecodeError:
-        print("Empty response returned. Please check URL again.")
-        exit(1)
+            logger.error(str(recordings_list))
+            return
 
+    except json.decoder.JSONDecodeError:
+        logger.error("Empty response returned. Please check URL again.")
+        return
+
+    meetings_list = recordings_list.get('meetings')
     downloaded_recordings = os.listdir(RECORDINGS_DIR)
     for meeting in meetings_list:
         recordings = meeting.get('recording_files')
@@ -40,7 +42,7 @@ def main():
             filename = recording_start + file_id + "." + file_type
 
             if filename not in downloaded_recordings:
-                print("Downloading " + filename + "...", end=" ")
+                logger.info("Downloading " + filename + "...")
 
                 # Referring to https://requests.readthedocs.io/en/latest/user/quickstart/#raw-response-content
                 r = requests.get(download_url, stream=True)
@@ -48,7 +50,6 @@ def main():
                 with open(filepath, 'wb') as fi:
                     for chunk in r.iter_content(CHUNK_SIZE):
                         fi.write(chunk)
-                print("Done")
 
 
 if __name__ == "__main__":

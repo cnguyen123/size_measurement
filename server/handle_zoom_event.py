@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import credentials
 import logging
+import get_zoom_recordings
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,8 @@ ZOOM_CLIENT_USER_NAME = "Gabriel User"
 
 in_meeting_control_api = "/live_meetings/" + credentials.MEETING_NUMBER + "/events"
 in_meeting_control_url = API_SERVER + in_meeting_control_api + ACCESS_TOKEN_SUFFIX
-payload = {'method': "recording.start"}
+start_record_payload = {'method': "recording.start"}
+stop_record_payload = {'method': "recording.stop"}
 
 gabriel_user_list = []
 
@@ -27,18 +29,29 @@ def verify(headers, body):
 
 
 def handle(headers, body):
-    logger.info("Request received from Zoom webhook")
     body_text = body.decode('utf-8')
     if verify(headers, body_text):
+        logger.info("Request received from Zoom webhook")
         content = json.loads(body_text)
-        if (content.get('event') == "meeting.participant_joined" and
+        if content.get('event') == "recording.completed":
+            get_zoom_recordings.main()
+
+        elif (content.get('event') == "meeting.participant_joined" and
                 content.get('payload').get('object').get('participant').get('user_name') == ZOOM_CLIENT_USER_NAME):
+            if len(gabriel_user_list) == 0:
+                response = requests.patch(in_meeting_control_url, json=start_record_payload)
+                if not response:
+                    logger.warning("Starting cloud recording failed. " + str(response))
+                else:
+                    logger.info("Cloud recording started.")
             gabriel_user_list.append(content.get('payload').get('object').get('participant').get('user_id'))
-            print(gabriel_user_list)
-        else:
-            pass
 
-
-if __name__ == "__main__":
-    response = requests.patch(in_meeting_control_url, json=payload)
-    print(response)
+        elif (content.get('event') == "meeting.participant_left" and
+              content.get('payload').get('object').get('participant').get('user_name') == ZOOM_CLIENT_USER_NAME):
+            gabriel_user_list.remove(content.get('payload').get('object').get('participant').get('user_id'))
+            if len(gabriel_user_list) == 0:
+                response = requests.patch(in_meeting_control_url, json=stop_record_payload)
+                if not response:
+                    logger.warning("Stopping cloud recording failed. " + str(response))
+                else:
+                    logger.info("Cloud recording stopped.")
