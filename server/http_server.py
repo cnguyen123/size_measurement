@@ -11,6 +11,7 @@ import aiohttp
 from aiohttp import web
 import aiohttp_jinja2
 import jinja2
+import handle_zoom_event
 
 
 ROLE = '1'
@@ -57,6 +58,13 @@ def get_signature(meeting_number, key, role, secret):
 
 async def favicon(request):
     return web.FileResponse('favicon.ico')
+
+
+async def event_handle(request):
+    assert request.content_length < 1000000, "Request content too fat"
+    body = await request.content.read()
+    handle_zoom_event.handle(request.headers, body)
+    return web.Response()
 
 
 class _ServerState:
@@ -129,11 +137,10 @@ def start_http_server(conn, step_names):
         web.static('/static', 'static'),
         web.static('/{}'.format(IMAGES_DIR), IMAGES_DIR),
         web.get('/ws', websocket_handler),
+        web.post('/notification', event_handle),
     ])
 
     context = ssl.SSLContext()
-    # print("IN HTTP SERVER >>>>>>>")
-    # print(os.listdir("keys"))
     context.load_cert_chain(CERTFILE, KEYFILE)
     logger.info("Starting HTTP Server")
     web.run_app(app, ssl_context=context)
