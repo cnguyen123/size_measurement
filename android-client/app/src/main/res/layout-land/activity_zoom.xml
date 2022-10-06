@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="edu.cmu.cs.sandwich.ZoomActivity">
+    tools:context="edu.cmu.cs.owf.ZoomActivity">
 
     <FrameLayout
         android:id="@+id/meetingVideoView"
