@@ -2,9 +2,9 @@ import math
 import numpy as np
 
 WRIST = 0
-THUMB_MCP = 1
-THUMB_PIP = 2
-THUMB_DIP = 3
+THUMB_CMC = 1
+THUMB_MCP = 2
+THUMB_IP = 3
 THUMB_TIP = 4
 INDEX_FINGER_MCP = 5
 INDEX_FINGER_PIP = 6
@@ -47,12 +47,12 @@ def get_hand_state(landmarks, shape):
     # ranges from -180 to 180 degrees.
     hand_state["orientation"] = math.degrees(math.atan2(y0 - y9, x9 - x0))
 
-    x1 = landmarks[THUMB_MCP].x * shape[1]
-    y1 = landmarks[THUMB_MCP].y * shape[0]
-    x2 = landmarks[THUMB_PIP].x * shape[1]
-    y2 = landmarks[THUMB_PIP].y * shape[0]
-    x3 = landmarks[THUMB_DIP].x * shape[1]
-    y3 = landmarks[THUMB_DIP].y * shape[0]
+    x1 = landmarks[THUMB_CMC].x * shape[1]
+    y1 = landmarks[THUMB_CMC].y * shape[0]
+    x2 = landmarks[THUMB_MCP].x * shape[1]
+    y2 = landmarks[THUMB_MCP].y * shape[0]
+    x3 = landmarks[THUMB_IP].x * shape[1]
+    y3 = landmarks[THUMB_IP].y * shape[0]
     x4 = landmarks[THUMB_TIP].x * shape[1]
     y4 = landmarks[THUMB_TIP].y * shape[0]
     d01 = dist([x0, y0], [x1, y1])
@@ -106,9 +106,9 @@ def get_hand_state(landmarks, shape):
     hand_state["pinky_finger_closed"] = d018 > d019 and d019 > d020
 
     landmark_y_order = np.argsort([pos.y for pos in landmarks])
-    if landmark_y_order[0] == THUMB_TIP and landmark_y_order[1] == THUMB_DIP:
+    if landmark_y_order[0] == THUMB_TIP and landmark_y_order[1] == THUMB_IP:
         hand_state["thumb_orientation"] = "up"
-    elif landmark_y_order[-1] == THUMB_TIP and landmark_y_order[-2] == THUMB_DIP:
+    elif landmark_y_order[-1] == THUMB_TIP and landmark_y_order[-2] == THUMB_IP:
         hand_state["thumb_orientation"] = "down"
     else:
         hand_state["thumb_orientation"] = "unknown"
