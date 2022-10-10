@@ -18,10 +18,10 @@ RING_FINGER_MCP = 13
 RING_FINGER_PIP = 14
 RING_FINGER_DIP = 15
 RING_FINGER_TIP = 16
-PINKY_FINGER_MCP = 17
-PINKY_FINGER_PIP = 18
-PINKY_FINGER_DIP = 19
-PINKY_FINGER_TIP = 20
+PINKY_MCP = 17
+PINKY_PIP = 18
+PINKY_DIP = 19
+PINKY_TIP = 20
 
 
 def dist(p, q):
@@ -94,12 +94,12 @@ def get_hand_state(landmarks, shape):
     d016 = dist([x0, y0], [x16, y16])
     hand_state["ring_finger_closed"] = d014 > d015 and d015 > d016
 
-    x18 = landmarks[PINKY_FINGER_PIP].x * shape[1]
-    y18 = landmarks[PINKY_FINGER_PIP].y * shape[0]
-    x19 = landmarks[PINKY_FINGER_DIP].x * shape[1]
-    y19 = landmarks[PINKY_FINGER_DIP].y * shape[0]
-    x20 = landmarks[PINKY_FINGER_TIP].x * shape[1]
-    y20 = landmarks[PINKY_FINGER_TIP].y * shape[0]
+    x18 = landmarks[PINKY_PIP].x * shape[1]
+    y18 = landmarks[PINKY_PIP].y * shape[0]
+    x19 = landmarks[PINKY_DIP].x * shape[1]
+    y19 = landmarks[PINKY_DIP].y * shape[0]
+    x20 = landmarks[PINKY_TIP].x * shape[1]
+    y20 = landmarks[PINKY_TIP].y * shape[0]
     d018 = dist([x0, y0], [x18, y18])
     d019 = dist([x0, y0], [x19, y19])
     d020 = dist([x0, y0], [x20, y20])
