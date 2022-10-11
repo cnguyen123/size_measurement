@@ -450,15 +450,11 @@ class InferenceEngine(cognitive_engine.Engine):
                                                         user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
             elif thumb_state == 'thumbs down':
-
                 print('Thumbs down detected.')
                 if not self._thumbs_down_found:
                     self._thumbs_down_found = True
-
-                    # Try to start a Zoom call
-                    return self._try_start_zoom(step)
-                    # return self._result_wrapper_for(step,
-                    #                                 audio='Thumbs down detected! Calling expert now.')
+                    # # Try to start a Zoom call
+                    # return self._try_start_zoom(step)
 
         if _thumbs_up_required(processor) and not self._thumbs_up_found:
             # User not ready yet, return without running the two phase object detection
