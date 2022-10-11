@@ -28,6 +28,10 @@ def dist(p, q):
     return math.sqrt(sum((px - qx) ** 2.0 for px, qx in zip(p, q)))
 
 
+def dot(p, q):
+    return sum(px * qx for px, qx in zip(p, q))
+
+
 def get_hand_state(landmarks, shape):
     """
     Returns a dictionary of current hand state, including hand orientation, finger open/closed,
@@ -60,6 +64,16 @@ def get_hand_state(landmarks, shape):
     d03 = dist([x0, y0], [x3, y3])
     d04 = dist([x0, y0], [x4, y4])
     hand_state["thumb_open"] = d04 > d03 and d03 > d02 and d02 > d01
+
+    x5 = landmarks[INDEX_FINGER_MCP].x * shape[1]
+    y5 = landmarks[INDEX_FINGER_MCP].y * shape[0]
+    v04 = (x4 - x0, y4 - y0)
+    v05 = (x5 - x0, y5 - y0)
+    v09 = (x9 - x0, y9 - y0)
+    hand_state["thumb_index_angle"] = math.degrees(
+        math.acos(dot(v04, v05) / math.sqrt(dot(v04, v04)) / math.sqrt(dot(v05, v05))))
+    hand_state["thumb_middle_angle"] = math.degrees(
+        math.acos(dot(v04, v09) / math.sqrt(dot(v04, v04)) / math.sqrt(dot(v09, v09))))
 
     x6 = landmarks[INDEX_FINGER_PIP].x * shape[1]
     y6 = landmarks[INDEX_FINGER_PIP].y * shape[0]
@@ -103,7 +117,7 @@ def get_hand_state(landmarks, shape):
     d018 = dist([x0, y0], [x18, y18])
     d019 = dist([x0, y0], [x19, y19])
     d020 = dist([x0, y0], [x20, y20])
-    hand_state["pinky_finger_closed"] = d018 > d019 and d019 > d020
+    hand_state["pinky_closed"] = d018 > d019 and d019 > d020
 
     landmark_y_order = np.argsort([pos.y for pos in landmarks])
     if landmark_y_order[0] == THUMB_TIP and landmark_y_order[1] == THUMB_IP:
@@ -131,12 +145,16 @@ def get_thumb_state(hand_landmark, shape):
     # Check if thumb open and other fingers closed
     if hand_state["thumb_open"] and hand_state["index_finger_closed"] and \
             hand_state["middle_finger_closed"] and hand_state["ring_finger_closed"] and \
-            hand_state["pinky_finger_closed"]:
-        # Check if the hand orientation is within range
-        if hand_state["orientation"] > 120 or hand_state["orientation"] < -150 or \
-                (hand_state["orientation"] < 60 and hand_state["orientation"] > -30):
-            if hand_state["thumb_orientation"] == "up" and hand_state["finger_y_order"] == "up":
-                thumb_state = "thumbs up"
-            elif hand_state["thumb_orientation"] == "down" and hand_state["finger_y_order"] == "down":
-                thumb_state = "thumbs down"
+            hand_state["pinky_closed"]:
+        # Check if the thumb-index-angle is appropriate
+        if hand_state["thumb_middle_angle"] <= 90 and \
+                hand_state["thumb_middle_angle"] > hand_state["thumb_index_angle"] and \
+                hand_state["thumb_index_angle"] > 15:
+            # Check if the hand orientation is within range
+            if hand_state["orientation"] > 120 or hand_state["orientation"] < -150 or \
+                    (hand_state["orientation"] < 60 and hand_state["orientation"] > -30):
+                if hand_state["thumb_orientation"] == "up" and hand_state["finger_y_order"] == "up":
+                    thumb_state = "thumbs up"
+                elif hand_state["thumb_orientation"] == "down" and hand_state["finger_y_order"] == "down":
+                    thumb_state = "thumbs down"
     return thumb_state
