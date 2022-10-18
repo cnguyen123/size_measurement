@@ -33,8 +33,6 @@ import wca_state_machine_pb2
 import measure_object_size as ms
 import hand_gestures as hg
 
-DEBUG_AUDIO = False
-
 SOURCE = 'owf_client'
 INPUT_QUEUE_MAXSIZE = 60
 PORT = 9099
@@ -71,7 +69,6 @@ _Detector = namedtuple('_Detector', ['detector', 'category_index'])
 
 mp_hands = mp.solutions.hands
 
-thumbs_up_audio = 'Thumbs up detected!' if DEBUG_AUDIO else None
 aruco_error_audio = 'Please place the bolt near the aruco marker, and make sure ' \
                     'the marker is fully shown.'
 length_error_audio = 'This seems to be a bolt with the incorrect length. ' \
@@ -237,7 +234,6 @@ class InferenceEngine(cognitive_engine.Engine):
         self.aruco_patience = 3
         self.error_patience = 2
         self._thumbs_up_found = False
-        self._thumbs_down_found = False
         # ############################################
         physical_devices = tf.config.list_physical_devices('GPU')
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -360,9 +356,6 @@ class InferenceEngine(cognitive_engine.Engine):
 
     def _try_start_zoom(self, step):
         if self._on_zoom_call:
-            # ###############################################
-            self._thumbs_down_found = False
-            # ###############################################
             return self._result_wrapper_for(step,
                                             zoom_result=owf_pb2.ToClientExtras.ZoomResult.EXPERT_BUSY)
         msg = {
@@ -393,13 +386,15 @@ class InferenceEngine(cognitive_engine.Engine):
             transition = self._states_for_expert_call.get_transition(new_step)
             # ###############################################
             self._thumbs_up_found = False
-            self._thumbs_down_found = False
             # ###############################################
             return self._result_wrapper_for_transition(transition)
 
         step = to_server_extras.step
         if step == '':
             state = self._states_models.get_start_state()
+        elif step == "WCA_FSM_END":
+            return self._result_wrapper_for(step,
+                                            user_ready=owf_pb2.ToClientExtras.UserReady.DISABLE)
         elif (to_server_extras.client_cmd ==
               owf_pb2.ToServerExtras.ClientCmd.ZOOM_START):
             return self._try_start_zoom(step)
@@ -422,7 +417,8 @@ class InferenceEngine(cognitive_engine.Engine):
 
         # End state reached
         if len(state.processors) == 0:
-            return self._result_wrapper_for(step)
+            return self._result_wrapper_for(step="WCA_FSM_END",
+                                            user_ready=owf_pb2.ToClientExtras.UserReady.DISABLE)
 
         assert len(state.processors) == 1, 'wrong number of processors'
         processor = state.processors[0]
@@ -436,29 +432,26 @@ class InferenceEngine(cognitive_engine.Engine):
         img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         # ############################################### Detecting hand gestures
-        result = self._hands.process(img)
-        if result.multi_hand_landmarks and len(result.multi_hand_landmarks) == 1:
-            hand_landmark = result.multi_hand_landmarks[0].landmark
-            thumb_state = hg.get_thumb_state(hand_landmark, img.shape)
+        if _thumbs_up_required(processor):
+            result = self._hands.process(img)
+            if result.multi_hand_landmarks and len(result.multi_hand_landmarks) == 1:
+                hand_landmark = result.multi_hand_landmarks[0].landmark
+                thumb_state = hg.get_thumb_state(hand_landmark, img.shape)
 
-            if thumb_state == 'thumbs up':
-                if _thumbs_up_required(processor):
+                if thumb_state == 'thumbs up':
                     print('Thumbs up detected.')
                     if not self._thumbs_up_found:
                         self._thumbs_up_found = True
-                        return self._result_wrapper_for(step, audio=thumbs_up_audio,
-                                                        user_ready=owf_pb2.ToClientExtras.UserReady.SET)
+                        return self._result_wrapper_for(step, user_ready=owf_pb2.ToClientExtras.UserReady.SET)
 
-            elif thumb_state == 'thumbs down':
-                print('Thumbs down detected.')
-                if not self._thumbs_down_found:
-                    self._thumbs_down_found = True
-                    # # Try to start a Zoom call
-                    # return self._try_start_zoom(step)
+                elif thumb_state == 'thumbs down':
+                    print('Thumbs down detected.')
+                    self._thumbs_up_found = False
+                    return self._result_wrapper_for(step, user_ready=owf_pb2.ToClientExtras.UserReady.CLEAR)
 
-        if _thumbs_up_required(processor) and not self._thumbs_up_found:
-            # User not ready yet, return without running the two phase object detection
-            return self._result_wrapper_for(step)
+            if not self._thumbs_up_found:
+                # User not ready yet, return without running the two phase object detection
+                return self._result_wrapper_for(step)
         # ###############################################
 
         # Insert a new axis to make an input tensor of shape (1, h, w, channel)
