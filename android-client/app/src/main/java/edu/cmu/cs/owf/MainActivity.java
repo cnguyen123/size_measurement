@@ -70,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE = 999;
     private static final String CALL_EXPERT = "CALL EXPERT";
     private static final String REPORT = "REPORT";
+    private static final String WCA_END_STATE = "WCA_END_STATE";
     private ToServerExtras.ClientCmd reqCommand = ToServerExtras.ClientCmd.NO_CMD;
     private ToServerExtras.ClientCmd prepCommand = ToServerExtras.ClientCmd.NO_CMD;
 
@@ -128,7 +129,11 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
             step = toClientExtras.getStep();
+            if (step.equals(WCA_END_STATE)) {
+                Log.i(TAG, "Assembly completed.");
+            }
 
+            // Display or hide the thumbs-up icon
             if (toClientExtras.getUserReady() == ToClientExtras.UserReady.SET) {
                 runOnUiThread(() -> {
                     readyView.setVisibility(View.VISIBLE);
@@ -150,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Protobuf parse error", e);
         }
 
+        // Prepare the command parsed from ASR to be sent to the server with the next frame
         if (reqCommand != ToServerExtras.ClientCmd.NO_CMD) {
             prepCommand = reqCommand;
             reqCommand = ToServerExtras.ClientCmd.NO_CMD;
@@ -167,6 +173,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // Load the user guidance (audio, image/video) from the result wrapper
         for (ResultWrapper.Result result : resultWrapper.getResultsList()) {
             if (result.getPayloadType() == PayloadType.TEXT) {
                 ByteString dataString = result.getPayload();
@@ -275,6 +282,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void analyze(@NonNull ImageProxy image) {
             boolean toWait = (prepCommand != ToServerExtras.ClientCmd.NO_CMD);
+            if (step.equals(WCA_END_STATE) && !toWait) {
+                image.close();
+                return;
+            }
             ToServerExtras.ClientCmd clientCmd = prepCommand;
             prepCommand = ToServerExtras.ClientCmd.NO_CMD;
             serverComm.sendSupplier(() -> {
