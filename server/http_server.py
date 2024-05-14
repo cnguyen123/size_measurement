@@ -1,62 +1,62 @@
 import asyncio
-import base64
-import credentials
-import hashlib
-import hmac
 import logging
 import os
-import time
 import ssl
+import time
+
 import aiohttp
 from aiohttp import web
 import aiohttp_jinja2
 import jinja2
+import jwt
 
+import credentials
 
-ROLE = '1'
+ROLE_HOST = 1
+ROLE_PARTICIPANT = 0
 USER_NAME = 'Human Expert'
 IMAGES_DIR = 'images'
-
+TOKEN_VALID_HRS = 24
 
 KEYS = 'keys'
 CERTFILE = os.path.join(KEYS, 'fullchain.pem')
 KEYFILE = os.path.join(KEYS, 'privkey.pem')
-
 
 logger = logging.getLogger(__name__)
 
 
 @aiohttp_jinja2.template('zoom.html')
 async def zoom(request):
-    meeting_number = credentials.MEETING_NUMBER
-    key = credentials.WEB_KEY
-    secret = credentials.WEB_SECRET
-    signature = get_signature(meeting_number, key, ROLE, secret)
+    jwt_token = gen_jwt_token(credentials.CLIENT_ID, credentials.CLIENT_SECRET,
+                              credentials.MEETING_NUMBER, ROLE_HOST)
     return {
-        'meeting_number': meeting_number,
-        'api_key': key,
-        'signature': signature,
+        'meeting_number': credentials.MEETING_NUMBER,
+        'user_name': USER_NAME,
+        'user_email': credentials.USER_EMAIL,
         'password': credentials.MEETING_PASSWORD,
-        'user_name': USER_NAME
+        'client_id': credentials.CLIENT_ID,
+        'jwt_token': jwt_token
     }
-
-
-def get_signature(meeting_number, key, role, secret):
-    ts = str(int(round(time.time() * 1000)) - 30000)
-    message = key + meeting_number + ts + role
-    message = base64.b64encode(bytes(message, 'utf-8'))
-    secret = bytes(secret, 'utf-8')
-    hash = hmac.new(secret, message, hashlib.sha256)
-    hash = base64.b64encode(hash.digest())
-    hash = hash.decode('utf-8')
-    raw_signature = '{}.{}.{}.{}.{}'.format(key, meeting_number, ts, role, hash)
-    signature = base64.b64encode(bytes(raw_signature, 'utf-8'))
-    signature = signature.decode('utf-8')
-    return signature.rstrip('=')
 
 
 async def favicon(request):
     return web.FileResponse('favicon.ico')
+
+
+def gen_jwt_token(key, secret, meeting_number, role):
+    iat = int(round(time.time())) - 30
+    exp = iat + 3600 * TOKEN_VALID_HRS
+    header = {'alg': 'HS256', 'typ': 'JWT'}
+    payload = {
+        'sdkKey': key,
+        'appKey': key,
+        'mn': meeting_number,
+        'role': role,
+        'iat': iat,
+        'exp': exp,
+        'tokenExp': exp
+    }
+    return jwt.encode(payload, secret, algorithm="HS256", headers=header)
 
 
 class _ServerState:
@@ -101,6 +101,7 @@ class _ServerState:
             logger.info('websocket connection closed')
 
             return ws
+
         return websocket_handler
 
     def get_user_connected(self):
@@ -132,8 +133,6 @@ def start_http_server(conn, step_names):
     ])
 
     context = ssl.SSLContext()
-    # print("IN HTTP SERVER >>>>>>>")
-    # print(os.listdir("keys"))
     context.load_cert_chain(CERTFILE, KEYFILE)
     logger.info("Starting HTTP Server")
     web.run_app(app, ssl_context=context)

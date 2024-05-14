@@ -344,8 +344,8 @@ class InferenceEngine(cognitive_engine.Engine):
         to_client_extras.user_ready = owf_pb2.ToClientExtras.UserReady.NO_CHANGE
 
         zoom_info = owf_pb2.ZoomInfo()
-        zoom_info.app_key = credentials.ANDROID_KEY
-        zoom_info.app_secret = credentials.ANDROID_SECRET
+        zoom_info.jwt_token = http_server.gen_jwt_token(credentials.CLIENT_ID, credentials.CLIENT_SECRET,
+                                                        credentials.MEETING_NUMBER, http_server.ROLE_PARTICIPANT)
         zoom_info.meeting_number = credentials.MEETING_NUMBER
         zoom_info.meeting_password = credentials.MEETING_PASSWORD
 
@@ -363,7 +363,7 @@ class InferenceEngine(cognitive_engine.Engine):
             'step': step
         }
         self._engine_conn.send(msg)
-        logger.info('Zoom Started')
+        logger.info('Sending Zoom info to client.')
         # ###############################################
         self._thumbs_up_found = False
         # ###############################################
