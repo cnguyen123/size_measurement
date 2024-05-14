@@ -22,6 +22,7 @@ import us.zoom.sdk.InMeetingVideoController;
 import us.zoom.sdk.JoinMeetingOptions;
 import us.zoom.sdk.JoinMeetingParams;
 import us.zoom.sdk.MeetingError;
+import us.zoom.sdk.MeetingParameter;
 import us.zoom.sdk.MeetingService;
 import us.zoom.sdk.MeetingServiceListener;
 import us.zoom.sdk.MeetingSettingsHelper;
@@ -37,6 +38,7 @@ import us.zoom.sdk.ZoomSDKInitializeListener;
 public class ZoomActivity extends AppCompatActivity {
     private static final String TAG = "ZoomActivity";
     private static final String DISPLAY_NAME = "Gabriel User";
+    private static final String ZOOM_DOMAIN = "zoom.us";
 
     private ZoomSDK zoomSDK;
 
@@ -52,8 +54,9 @@ public class ZoomActivity extends AppCompatActivity {
         if (!zoomSDK.isInitialized()) {
             Intent intent = getIntent();
             ZoomSDKInitParams initParams = new ZoomSDKInitParams();
-            initParams.appKey = intent.getStringExtra(MainActivity.EXTRA_APP_KEY);
-            initParams.appSecret = intent.getStringExtra(MainActivity.EXTRA_APP_SECRET);
+            initParams.jwtToken = intent.getStringExtra(MainActivity.EXTRA_JWT_TOKEN);
+            Log.w(TAG, "Zoom SDK Init: Got JWT token = " + initParams.jwtToken);
+            initParams.domain = ZOOM_DOMAIN;
             zoomSDK.initialize(this, zoomSDKInitializeListener, initParams);
         }
         else if (zoomSDK.getMeetingService().getMeetingStatus() !=
@@ -86,25 +89,24 @@ public class ZoomActivity extends AppCompatActivity {
         meetingService.joinMeetingWithParams(ZoomActivity.this, params, new JoinMeetingOptions());
     }
 
-    private final ZoomSDKInitializeListener zoomSDKInitializeListener =
-            new ZoomSDKInitializeListener() {
-                @Override
-                public void onZoomSDKInitializeResult(int errorCode, int internalErrorCode) {
-                    if (errorCode != ZoomError.ZOOM_ERROR_SUCCESS) {
-                        Toast.makeText(ZoomActivity.this, "Failed to initialize Zoom SDK. Error: " +
-                                        errorCode + ", internalErrorCode=" + internalErrorCode,
-                                Toast.LENGTH_LONG).show();
-                    } else {
-                        startMeeting();
-                    }
-                }
+    private final ZoomSDKInitializeListener zoomSDKInitializeListener = new ZoomSDKInitializeListener() {
+        @Override
+        public void onZoomSDKInitializeResult(int errorCode, int internalErrorCode) {
+            if (errorCode != ZoomError.ZOOM_ERROR_SUCCESS) {
+                Toast.makeText(ZoomActivity.this, "Failed to initialize Zoom SDK. Error: " +
+                                errorCode + ", internalErrorCode=" + internalErrorCode,
+                        Toast.LENGTH_LONG).show();
+            } else {
+                startMeeting();
+            }
+        }
 
-                @Override
-                public void onZoomAuthIdentityExpired() {
-                    Toast.makeText(ZoomActivity.this, "Zoom SDK authentication identity expired.",
-                            Toast.LENGTH_LONG).show();
-                }
-            };
+        @Override
+        public void onZoomAuthIdentityExpired() {
+            Toast.makeText(ZoomActivity.this, "Zoom SDK authentication identity expired.",
+                    Toast.LENGTH_LONG).show();
+        }
+    };
 
     private final MeetingServiceListener meetingServiceListener = new MeetingServiceListener() {
         @Override
@@ -134,6 +136,11 @@ public class ZoomActivity extends AppCompatActivity {
 
                 setupView();
             }
+        }
+
+        @Override
+        public void onMeetingParameterNotification(MeetingParameter meetingParameter) {
+
         }
     };
 
@@ -167,27 +174,26 @@ public class ZoomActivity extends AppCompatActivity {
         inMeetingService.getInMeetingVideoController().rotateMyVideo(displayRotation);
     }
 
-    private final InMeetingServiceListener inMeetingServiceListener =
-            new SimpleInMeetingListener() {
-                @Override
-                public void onMeetingNeedCloseOtherMeeting(InMeetingEventHandler inMeetingEventHandler) {
-                    inMeetingEventHandler.endOtherMeeting();
-                }
+    private final InMeetingServiceListener inMeetingServiceListener = new SimpleInMeetingListener() {
+        @Override
+        public void onMeetingNeedCloseOtherMeeting(InMeetingEventHandler inMeetingEventHandler) {
+            inMeetingEventHandler.endOtherMeeting();
+        }
 
-                @Override
-                public void onMeetingFail(int errorCode, int internalErrorCode) {
-                    Toast.makeText(ZoomActivity.this, "Meeting Fail", Toast.LENGTH_LONG).show();
-                    Log.i(TAG, "onMeetingFail, errorCode=" + errorCode + ", internalErrorCode=" +
-                            internalErrorCode);
-                }
+        @Override
+        public void onMeetingFail(int errorCode, int internalErrorCode) {
+            Toast.makeText(ZoomActivity.this, "Meeting Fail", Toast.LENGTH_LONG).show();
+            Log.i(TAG, "onMeetingFail, errorCode=" + errorCode + ", internalErrorCode=" +
+                    internalErrorCode);
+        }
 
-                @Override
-                public void onMeetingLeaveComplete(long ret /*leave reason*/) {
+        @Override
+        public void onMeetingLeaveComplete(long ret /*leave reason*/) {
             /* The docs mention MobileRTCVideoViewManager#destroy, but it does not exist.
             if (mobileRTCVideoViewManager != null) {
                 mobileRTCVideoViewManager.destroy();
             } */
-                    ZoomActivity.this.finish();
-                }
-            };
+            ZoomActivity.this.finish();
+        }
+    };
 }

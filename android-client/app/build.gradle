@@ -11,13 +11,13 @@ Properties properties = new Properties()
 properties.load(project.rootProject.file('local.properties').newDataInputStream())
 
 android {
-    compileSdkVersion 29
-    buildToolsVersion "29.0.3"
+    compileSdkVersion 33
+    buildToolsVersion "30.0.2"
 
     defaultConfig {
         applicationId 'edu.cmu.cs.owf_asr'
-        minSdkVersion 24
-        targetSdkVersion 29
+        minSdkVersion 27
+        targetSdkVersion 33
         versionCode 1
         versionName "1.0"
     }
@@ -59,7 +59,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.android.material:material:1.4.0'
+    implementation 'com.google.android.material:material:1.6.0'
 
     implementation 'edu.cmu.cs.gabriel:client:2.4.1'
     implementation 'edu.cmu.cs.gabriel:protocol:2.0.1'
@@ -73,6 +73,6 @@ dependencies {
     implementation "androidx.camera:camera-lifecycle:$camerax_version"
     // CameraX View class
     implementation "androidx.camera:camera-view:1.0.0-alpha22"
-    implementation project(':commonlib')
+    // Zoom Meeting SDK
     implementation project(':mobilertc')
 }

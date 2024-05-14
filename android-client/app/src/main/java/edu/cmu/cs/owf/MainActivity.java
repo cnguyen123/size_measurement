@@ -62,10 +62,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int WIDTH = 1920;
     private static final int HEIGHT = 1080;
 
-    public static final String EXTRA_APP_KEY = "edu.cmu.cs.owf.APP_KEY";
-    public static final String EXTRA_APP_SECRET = "edu.cmu.cs.owf.APP_SECRET";
-    public static final String EXTRA_MEETING_NUMBER = "edu.cmu.cs.owf.MEETING_NUMBER";
-    public static final String EXTRA_MEETING_PASSWORD = "edu.cmu.cs.owf.MEETING_PASSWORD";
+    public static final String EXTRA_JWT_TOKEN = "edu.cmu.cs.wca.JWT_TOKEN";
+    public static final String EXTRA_MEETING_NUMBER = "edu.cmu.cs.wca.MEETING_NUMBER";
+    public static final String EXTRA_MEETING_PASSWORD = "edu.cmu.cs.wca.MEETING_PASSWORD";
 
     private static final int REQUEST_CODE = 999;
     private static final String CALL_EXPERT = "CALL EXPERT";
@@ -112,8 +111,7 @@ public class MainActivity extends AppCompatActivity {
                 ZoomInfo zoomInfo = toClientExtras.getZoomInfo();
 
                 Intent intent = new Intent(this, ZoomActivity.class);
-                intent.putExtra(EXTRA_APP_KEY, zoomInfo.getAppKey());
-                intent.putExtra(EXTRA_APP_SECRET, zoomInfo.getAppSecret());
+                intent.putExtra(EXTRA_JWT_TOKEN, zoomInfo.getJwtToken());
                 intent.putExtra(EXTRA_MEETING_NUMBER, zoomInfo.getMeetingNumber());
                 intent.putExtra(EXTRA_MEETING_PASSWORD, zoomInfo.getMeetingPassword());
 
