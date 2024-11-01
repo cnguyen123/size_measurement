@@ -13,6 +13,7 @@ pip install opencv-contrib-python
 pip install pandas
 pip install tensorflow
 pip install tensorflow-object-detection-api
+
 ### 3. How to Use
 
 1. **Set Up the Object Detector**  
