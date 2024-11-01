@@ -37,3 +37,11 @@ pip install tensorflow-object-detection-api
    ├── app.pbfsm
    ├── object-detector_model/
    └── dummy_classifier/
+
+5. **Run the Server**
+   ```bash
+   python server.py ../../app.pbfsm
+
+   ```
+6. **Connect the Client**
+   Build and run the Android client app to connect to the server and execute the predefined workflow.
