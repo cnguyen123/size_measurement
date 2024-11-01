@@ -28,12 +28,17 @@ Use the OpenWorkflow service [here](https://cmusatyalab.github.io/OpenWorkflow/)
 
 
 Workspace/
+
 ├── Size_Measurement/
-│   ├── server/
+│   
+    ├── server/
 │   │   ├── server.py
 │   │   └── measure_object_size.py
+|
 ├── app.pbfsm
+|
 ├── object-detector_model/
+|
 └── dummy_classifier/
 
 5. Run the Server
