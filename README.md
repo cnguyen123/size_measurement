@@ -35,6 +35,7 @@ Workspace/
 ├── app.pbfsm
 ├── object-detector_model/
 └── dummy_classifier/
+
 5. Run the Server
 python server.py ../../app.pbfsm
 6. Connect the Client
