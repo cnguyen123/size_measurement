@@ -2,41 +2,40 @@
 
 
 **1. Introduction**
-
-This program helps measure the size of an object returned by the object detector. Please see the workflow file (i.e., open the file app.pbfsm with the OWF web service https://cmusatyalab.github.io/OpenWorkflow/) to see the logic of one step where an object is measured its scale.   
+   
+This program measures the size of objects detected by an object detector. For a visual overview of the workflow, open the app.pbfsm file using the OpenWorkflow web service (https://cmusatyalab.github.io/OpenWorkflow/) to see the specific step where object size measurement occurs.
 
 **2. Package Installation**
 
 Server side:
-- opencv: pip install opencv-contrib-python
-- pandas: pip install pandas
-- tensorflow: pip install tensorflow
-- tensorflow-object-detection: pip install tensorflow-object-detection-api
+pip install opencv-contrib-python
+pip install pandas
+pip install tensorflow
+pip install tensorflow-object-detection-api
 
 **3. How to use**
 
-- Build an object detector for the object.
-- As the current moment, it also needs a dummy classifier (because it extended the TwoStageOWF). This will be removed next version of server.py after this measurement processor is added to the OpenWorkFlow.
-- Access the OWF service at https://cmusatyalab.github.io/OpenWorkflow/ to build a workflow, as the example attached (i.e., app.pbfsm). 
-- Upload all to a server running Tensorflow API:
-- The file is ordered in the server as:
+1. Set Up the Object Detector
+Build an object detector model for the target object.
 
------Workspace
+2. Create Dummy Classifier (Temporary Requirement)
+Currently, a dummy classifier is also needed as this program extends the TwoStageOWF module. This requirement will be removed in the next update of server.py after the measurement processor is fully integrated with OpenWorkFlow.
 
------------Size_Measurement
+3. Build the Workflow
+Use the OpenWorkflow service [here](https://cmusatyalab.github.io/OpenWorkflow/) to create a workflow, referencing the provided example app.pbfsm.
 
----------------server
+4. Organize Files on the Server
 
-----------------------server.py
 
-----------------------measure_object_size.py
-
-------------app.pbfsm
-
-------------object-detector_model
-
-------------dummy_classifier
-
-- Run the server as: python server.py ../../app.pbfsm
-- Connect the client (build and run the android-client app) to the server to go through the predefined workflow.
-
+Workspace/
+├── Size_Measurement/
+│   ├── server/
+│   │   ├── server.py
+│   │   └── measure_object_size.py
+├── app.pbfsm
+├── object-detector_model/
+└── dummy_classifier/
+5. Run the Server
+python server.py ../../app.pbfsm
+6. Connect the Client
+Build and run the Android client app to connect to the server and execute the predefined workflow.
